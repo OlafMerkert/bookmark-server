@@ -20,7 +20,11 @@
    #:save-changes
    #:delete-object
    #:assign-bookmark-category
-   #:unassign-bookmark-category))
+   #:unassign-bookmark-category
+   #:assign-bookmark-categories
+   #:unassign-bookmark-categories
+   #:category-by-name
+   #:category-by-id-or-name))
 
 (in-package :bookmarks)
 
@@ -121,6 +125,8 @@
       (initialise-database)))
 
 ;;; often used selects
+(define-condition db-object-not-found ()
+  ())
 
 (defun all-bookmarks ()
   (select 'bookmark :order-by [title]
@@ -136,11 +142,25 @@
     obj))
 
 (defun get-by-id (class id)
-  (aif (select class :where [= [id] id]
-               :flatp t)
+  (aif (select class :where [= [id] id] :flatp t)
        (first it)
-       ;; todo error message
-       nil))
+       (error 'db-object-not-found)))
+
+(defun category-by-name (name)
+  (aif (select 'category :where [= [name] name] :flatp t)
+       (first it)
+       (add 'category :name name)))
+
+(defun parse-positive-integer (string)
+  (if (every #'digit-char-p string)
+      (parse-integer string)))
+
+
+(defun category-by-id-or-name (id-or-name)
+  (aif (parse-positive-integer id-or-name)
+       (get-by-id 'category it)
+       (category-by-name id-or-name)))
+
 
 (defun save-changes (object)
   (update-records-from-instance object))
@@ -150,6 +170,7 @@
         (id (id object)))
     (delete-records :from class
                     :where [= [id] id])))
+
 ;;; categories and bookmarks
 (defun assign-bookmark-category (bookmark category)
   "return T if assignment was created, NIL if already present."
@@ -164,9 +185,16 @@
         (update-instance-from-records category))
       t)))
 
+(defun assign-bookmark-categories (bookmark categories)
+  (mapc (clambda (assign-bookmark-category bookmark x!category)) categories))
+
+
 (defun unassign-bookmark-category (bookmark category)
   (let ((bid (id bookmark)) (cid (id category)))
     (prog1 (delete-records :from 'bookmark-category
                            :where [and [= [bookmark-id] bid] [= [category-id] cid]])
       (update-instance-from-records bookmark)
       (update-instance-from-records category))))
+
+(defun unassign-bookmark-categories (bookmark categories)
+  (mapc (clambda (unassign-bookmark-category bookmark x!category)) categories))

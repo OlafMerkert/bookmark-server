@@ -22,34 +22,35 @@
     (id)
   ;; todo delete category assignments?
   (bookmarks:delete-object
-   (bookmarks:get-by-id 'bookmark id)))
+   (bookmarks:get-by-id 'bm:bookmark id)))
 
 (defun parse-categories (categories)
-  (assert (stringp categories))
-  (mapcar #'bookmarks:category-by-id-or-name
-          (split-sequence:split-sequence #\, categories)))
+  (when (stringp categories)
+    (mapcar #'bookmarks:category-by-id-or-name
+            (split-sequence:split-sequence #\, categories))))
 
 (define-easy-handler (bookmark-new :uri "/bookmarks/bookmark/new")
     (title url categories)
-  (let ((bm (bookmarks:add 'bookmark :title title :url url)))
+  ;; todo check for duplicates
+  (let ((bm (bm:add 'bm:bookmark :title title :url url)))
     (bookmarks:assign-bookmark-categories bm
                                           (parse-categories categories))))
 
 (define-easy-handler (bookmark-edit :uri "/bookmarks/bookmark/edit")
     (id title url)
-  (let ((bm (bm:get-by-id 'bookmark id)))
+  (let ((bm (bm:get-by-id 'bm:bookmark id)))
     (setf (bm:title bm) title
           (bm:url bm) url)
     (bm:save-changes bm)))
 
 (define-easy-handler (bookmark-assign-category :uri "/bookmarks/bookmark/category/assign")
     (id categories)
-  (bm:assign-bookmark-categories (bm:get-by-id 'bookmark id)
+  (bm:assign-bookmark-categories (bm:get-by-id 'bm:bookmark id)
                                  (parse-categories categories)))
 
 (define-easy-handler (bookmark-unassign-category :uri "/bookmarks/bookmark/category/unassign")
     (id categories)
-  (bm:unassign-bookmark-categories (bm:get-by-id 'bookmark id)
+  (bm:unassign-bookmark-categories (bm:get-by-id 'bm:bookmark id)
                                    (parse-categories categories)))
 
 ;;; now the main UI
@@ -57,16 +58,15 @@
 (define-easy-handler (bookmarks-list :uri "/bookmarks/list") ()
   (html/document (:title "Bookmarks"
                          :style "/bookmarks/style.css"
-                         :script "/jquery.min.js"
+                         :script "/scripts/jquery-1.10.2.min.js"
                          :script "/bookmarks/logic.js")
     (:h1 "Bookmarks")
     ;; todo Form for creating new bookmarks
-    (:form :name "bookmarkNew"
+    (:form :id "bookmarkNew"
            (:input :id "bookmarkId" :type "hidden" :value "")
            (:input :id "bookmarkTitle" :type "text" :value "")
            (:input :id "bookmarkUrl" :type "text" :value "")
-           (:button :type "submit"
-                    "New"))
+           (:input :type "submit" :value "New"))
     ;; todo List of present bookmarks
     (:ul
      (let (odd)
@@ -93,8 +93,29 @@
         (let ((verbose-url (@@ ($ this) (find "span"))))
           (if (@@ verbose-url (has-class "hidden"))
               (@@ verbose-url (remove-class "hidden"))
-              (@@ verbose-url (add-class "hidden"))
-              ))))))
+              (@@ verbose-url (add-class "hidden")))))
+      ;; creating new bookmark
+      (defun bookmark-new ()
+        (let ((bm-url (@@ ($ "#bookmarkUrl") (val)))
+              (bm-title (@@ ($ "#bookmarkTitle") (val))))
+          ;; todo abort on empty url (title can be autofilled)
+          (@@ $ (ajax
+                 (create url "/bookmarks/bookmark/new"
+                         data (create url bm-url 
+                                      title bm-title)
+                         type "GET" 
+                         ;; todo better feedback on error and success
+                         success (lambda ()
+                                   (alert "New Bookmark created"))
+                         error (lambda ()
+                                 (alert "Failure creating bookmark")))
+                 ;; todo insert bookmark into current display (if successfull)
+                 ))))
+      ($! "#bookmarkNew" submit (event)
+        (@@ event (prevent-default))
+        (bookmark-new)
+        ;; todo ajax call does not yet happen
+        ))))
 
 (define-easy-handler (bookmarks-css :uri "/bookmarks/style.css") ()
   (setf (hunchentoot:content-type*) "text/css")

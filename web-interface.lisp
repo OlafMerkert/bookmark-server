@@ -18,40 +18,54 @@
 (defpar bm-root '(bookmarks))
 
 ;;; first all the possible AJAX requests
-(define-easy-handler (bookmark-delete :uri "/bookmarks/bookmark/delete")
-    (id)
-  ;; todo delete category assignments?
-  (bookmarks:delete-object
-   (bookmarks:get-by-id 'bm:bookmark id)))
+
+(defmacro define-ajax-action (breadcrumb parameters &body body)
+  `(define-easy-handler (,(apply #'symb 'ajax- (splice-in '- breadcrumb ))
+                          :uri ,(breadcrumb->url (append bm-root breadcrumb)))
+       ,parameters
+     (format nil "~S" (progn ,@body))))
+;; todo integrate error handling
+;; todo can we unify error handling between js and cl?
+
+(define-ajax-action (bookmark delete) (id)
+  (handler-case
+      (prog1 'success
+        (bm:delete-bookmark (bm:bookmark-by-id id)))
+    (bm:db-object-not-found () 'already-deleted)))
 
 (defun parse-categories (categories)
   (when (stringp categories)
     (mapcar #'bookmarks:category-by-id-or-name
             (split-sequence:split-sequence #\, categories))))
 
-(define-easy-handler (bookmark-new :uri "/bookmarks/bookmark/new")
-    (title url categories)
+(define-ajax-action (bookmark new) (title url categories)
   ;; todo check for duplicates
-  (let ((bm (bm:add 'bm:bookmark :title title :url url)))
-    (bookmarks:assign-bookmark-categories bm
-                                          (parse-categories categories))))
+  (mvbind (bm correct-title) (bm:bookmark-by-url url title)
+    (if correct-title
+        (prog1 'success
+          (when categories
+            (bookmarks:assign-bookmark-categories
+             bm (parse-categories categories))))
+        'already-exists)))
 
-(define-easy-handler (bookmark-edit :uri "/bookmarks/bookmark/edit")
-    (id title url)
-  (let ((bm (bm:get-by-id 'bm:bookmark id)))
-    (setf (bm:title bm) title
-          (bm:url bm) url)
-    (bm:save-changes bm)))
+(define-ajax-action (bookmark edit) (id title url)
+  (handler-case
+      (let ((bm (bm:bookmark-by-id id)))
+        (setf (bm:title bm) title
+              (bm:url bm) url)
+        (bm:save-changes bm)
+        'success)
+    (bm:db-object-not-found () 'does-not-exist)))
 
-(define-easy-handler (bookmark-assign-category :uri "/bookmarks/bookmark/category/assign")
-    (id categories)
-  (bm:assign-bookmark-categories (bm:get-by-id 'bm:bookmark id)
-                                 (parse-categories categories)))
+(define-ajax-action (bookmark category assign) (id categories)
+  ;; todo error handling
+  (bm:assign-bookmark-categories
+   (bm:get-by-id 'bm:bookmark id) (parse-categories categories)))
 
-(define-easy-handler (bookmark-unassign-category :uri "/bookmarks/bookmark/category/unassign")
-    (id categories)
-  (bm:unassign-bookmark-categories (bm:get-by-id 'bm:bookmark id)
-                                   (parse-categories categories)))
+(define-ajax-action (bookmark category unassign) (id categories)
+  ;; todo error handling
+  (bm:unassign-bookmark-categories
+   (bm:bookmark-by-id id) (parse-categories categories)))
 
 ;;; now the main UI
 

@@ -24,7 +24,11 @@
    #:assign-bookmark-categories
    #:unassign-bookmark-categories
    #:category-by-name
-   #:category-by-id-or-name))
+   #:category-by-id-or-name
+   #:bookmark-by-url
+   #:bookmark-by-id
+   #:delete-bookmark
+   #:db-object-not-found))
 
 (in-package :bookmarks)
 
@@ -126,7 +130,12 @@
 
 ;;; often used selects
 (define-condition db-object-not-found ()
-  ())
+  ((class :initarg :class
+          :initform nil)
+   (column :initarg :column
+           :initform nil)
+   (value :initarg :value
+          :initform nil)))
 
 (defun all-bookmarks ()
   (select 'bookmark :order-by [title]
@@ -144,7 +153,7 @@
 (defun get-by-id (class id)
   (aif (select class :where [= [id] id] :flatp t)
        (first it)
-       (error 'db-object-not-found)))
+       (error 'db-object-not-found :class class :column 'id :value id)))
 
 (defun category-by-name (name)
   (aif (select 'category :where [= [name] name] :flatp t)
@@ -155,11 +164,19 @@
   (if (every #'digit-char-p string)
       (parse-integer string)))
 
-
 (defun category-by-id-or-name (id-or-name)
   (aif (parse-positive-integer id-or-name)
        (get-by-id 'category it)
        (category-by-name id-or-name)))
+
+(defun bookmark-by-url (url &optional (title ""))
+  (aif (select 'bookmark :where [= [url] url] :flatp t)
+       (let ((bm (first it)))
+         (values bm (string= (title bm) title)))
+       (values (add 'bookmark :title title :url url) t)))
+
+(defun bookmark-by-id (id)
+  (get-by-id 'bookmark id))
 
 
 (defun save-changes (object)
@@ -170,6 +187,14 @@
         (id (id object)))
     (delete-records :from class
                     :where [= [id] id])))
+
+(defun delete-bookmark (bm)
+  (let ((id (id bm)))
+    (delete-records :from 'bookmark-category
+                    :where [= [bookmark-id] id])
+    (delete-records :from 'bookmark
+                    :where [= [id] id])))
+
 
 ;;; categories and bookmarks
 (defun assign-bookmark-category (bookmark category)

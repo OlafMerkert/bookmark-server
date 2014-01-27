@@ -100,7 +100,8 @@
                    :class (if (notf odd) "bookmark odd" "bookmark even")
                    (:a :href (bm:url bm) (esc (bm:title bm)))
                    (:br)
-                   (:span :class "hidden" (esc (bm:url bm))))))))))
+                   (:span :class "hidden" (esc (bm:url bm))))))))
+    (:p "Use [p] and [n] keys to select any entry.")))
 
 ;;; todo move generally useful parenscript macros to some utility collection
 (ew
@@ -130,16 +131,70 @@
                                  (alert "Failure creating bookmark")))
                  ;; todo insert bookmark into current display (if successfull)
                  ))))
+
+      
+    ;; selecting bookmarks
+    (defvar *selected-bookmark-index* -1)
+
+    (defun valid-bookmark-index-p (index)
+      (and (<= 0 index)
+           (< index (@ ($ ".bookmark") length))))
+      
+    (defun get-bookmark-at-index (index)
+      (let ((bms ($ ".bookmark")))
+        (if (valid-bookmark-index-p index)
+            (@@ bms (eq index))
+            (@@ bms (eq 0)))))
+
+    (defun bookmark-select (index)
+      (unless (= *selected-bookmark-index* index)
+        ;; first remove the mark from previous selection
+        (@@ (get-bookmark-at-index *selected-bookmark-index*)
+            (remove-class "selected"))
+        ;; then add the mark to the next
+        (@@ (get-bookmark-at-index index)
+            (add-class "selected"))
+        (setf *selected-bookmark-index* index)))
+    ;; fix highlighting
+
+    (defun bookmark-select-next ()
+      (let ((index  (+ *selected-bookmark-index* 1)))
+        (if (valid-bookmark-index-p index)
+            (bookmark-select index))))
+
+    (defun bookmark-select-prev ()
+      (let ((index  (- *selected-bookmark-index* 1)))
+        (if (valid-bookmark-index-p index)
+            (bookmark-select index))))
+
+    ($! document ready ()
+      ;; hiding/unhiding url of bookmark
+      ($! ".bookmark" click ()
+        (let ((verbose-url (@@ ($ this) (find "span"))))
+          (if (@@ verbose-url (has-class "hidden"))
+              (@@ verbose-url (remove-class "hidden"))
+              (@@ verbose-url (add-class "hidden")))))
+
+      ;; creating new bookmark
       ($! "#bookmarkNew" submit (event)
         (@@ event (prevent-default))
-        (bookmark-new)
-        ;; todo ajax call does not yet happen
-        ))))
+        (bookmark-new))
+
+      ;; setup keyboard bindings
+      ($! "body" keydown (event)
+        (@@ event (prevent-default))
+        (case (@ event which)
+          (80 (bookmark-select-prev)) ; p
+          (78 (bookmark-select-next)) ; n
+          ))
+      nil
+      )))
 
 (define-easy-handler (bookmarks-css :uri "/bookmarks/style.css") ()
   (setf (hunchentoot:content-type*) "text/css")
   (css-lite:css
     ((".odd") (:background "#f1f6fe"))
     ((".even") (:background "#f2f4f5"))
-    ((".hidden") (:display "none"))))
+    ((".hidden") (:display "none"))
+    ((".selected") (:background-color "yellow"))))
 

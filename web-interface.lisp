@@ -6,7 +6,8 @@
   (:use :cl :ol :web-utils
         :hunchentoot :cl-who
         :parenscript)
-  (:export))
+  (:export
+   #:start-bookmark-server))
 
 (in-package :bookmark-web-interface)
 
@@ -15,7 +16,17 @@
 (eval-when (:load-toplevel :execute)
   (register-web-application "Bookmark Server" "/bookmarks"))
 
-(defpar bm-root '(bookmarks))
+(defun start-bookmark-server ()
+  (bm:connect-database)
+  (load-web-library :jquery)
+  (start-server))
+
+(ew (defpar bm-root '(bookmarks)))
+
+(define-easy-handler (bookmarks-start :uri "/bookmarks") ()
+  (html/document (:title #1="Bookmark Server")
+    (:h1 #1#)
+    (:p "View the " (:a :href (breadcrumb->url '(bookmarks list)) "list") " of bookmarks.")))
 
 ;;; first all the possible AJAX requests
 
@@ -75,13 +86,13 @@
                          :script "/scripts/jquery-1.10.2.min.js"
                          :script "/bookmarks/logic.js")
     (:h1 "Bookmarks")
-    ;; todo Form for creating new bookmarks
+    ;; Form for creating new bookmarks
     (:form :id "bookmarkNew"
            (:input :id "bookmarkId" :type "hidden" :value "")
            (:input :id "bookmarkTitle" :type "text" :value "")
            (:input :id "bookmarkUrl" :type "text" :value "")
            (:input :type "submit" :value "New"))
-    ;; todo List of present bookmarks
+    ;; List of present bookmarks
     (:ul
      (let (odd)
        (dolist (bm (bm:all-bookmarks))
@@ -91,24 +102,18 @@
                    (:br)
                    (:span :class "hidden" (esc (bm:url bm))))))))))
 
+;;; todo move generally useful parenscript macros to some utility collection
+(ew
 (defmacro/ps @@ (&rest args)
     `(chain ,@args))
 
 (defmacro/ps $! (obj handler args &body body)
   "Install an event handler using jQuery on the solected object."
-  `(@@ ($ ,obj) (,handler (lambda ,args ,@body))))
+  `(@@ ($ ,obj) (,handler (lambda ,args ,@body)))))
 
 (define-easy-handler (bookmarks-js :uri "/bookmarks/logic.js") ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
-    ($! document ready ()
-      ;; hiding/unhiding url of bookmark
-      ($! ".bookmark" click ()
-        (let ((verbose-url (@@ ($ this) (find "span"))))
-          (if (@@ verbose-url (has-class "hidden"))
-              (@@ verbose-url (remove-class "hidden"))
-              (@@ verbose-url (add-class "hidden")))))
-      ;; creating new bookmark
       (defun bookmark-new ()
         (let ((bm-url (@@ ($ "#bookmarkUrl") (val)))
               (bm-title (@@ ($ "#bookmarkTitle") (val))))

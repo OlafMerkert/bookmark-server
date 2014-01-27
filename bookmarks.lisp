@@ -155,7 +155,18 @@
        (first it)
        (error 'db-object-not-found :class class :column 'id :value id)))
 
+(define-condition empty-parameter ()
+  ((name :initarg :name
+         :initform nil)))
+
+(defmacro ensure-non-empty-param (&rest params)
+  `(progn
+     ,@(mapcar #`(when (length=0 ,a1)
+                   (error 'empty-parameter :name ',a1))
+               params)))
+
 (defun category-by-name (name)
+  (ensure-non-empty-param name)
   (aif (select 'category :where [= [name] name] :flatp t)
        (first it)
        (add 'category :name name)))
@@ -170,6 +181,7 @@
        (category-by-name id-or-name)))
 
 (defun bookmark-by-url (url &optional (title ""))
+  (ensure-non-empty-param url)
   (aif (select 'bookmark :where [= [url] url] :flatp t)
        (let ((bm (first it)))
          (values bm (string= (title bm) title)))

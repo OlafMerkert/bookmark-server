@@ -1,0 +1,17 @@
+* Bookmark server
+currently at the very, very start of its development.
+
+** Motivation
+Some months ago, I explored the very nice browser conkeror. While not quite as fast as Chromium, the main issue was the lack of decent bookmark support. And even the Chromium bookmark manager is not a very convenient tool when it comes to managing the hierarchy.
+
+My favorite bookmark system ever was of course the one provided by the Gnome browser Epiphany (not sure it still is the same), where bookmarks would only be assigned categories, and Epiphany figured out the hierarchy of the Bookmarks menu on its own, and also tried to keep it shallow.
+
+** Goals
+Check out ~roadmap.org~ for some ideas and features envisioned.
+
+Of course, the main goal is to develop some tools and experience for writing modern web applications in Common Lisp.
+
+** How to run it
+Currently, it does not do much, you can add bookmarks and view a list of all bookmarks stored in a Sqlite3 database. All the dependencies are either available in Quicklisp or on my Github.
+
+To run the application, load it via asdf/quicklisp, then call ~(bookmark-web-interface:start-bookmark-server)~, which will automatically setup a database in ~/var/cache/~.

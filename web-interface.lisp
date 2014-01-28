@@ -17,7 +17,7 @@
   (register-web-application "Bookmark Server" "/bookmarks"))
 
 (defun start-bookmark-server ()
-  (bm:connect-database)
+  (bm:connect-database :initialise t)
   (load-web-library :jquery)
   (start-server))
 

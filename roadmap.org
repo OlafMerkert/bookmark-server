@@ -12,6 +12,7 @@ something Emacs like? could be very efficient, and would integrate well with con
 * TODO browser integration / synchronisation
 perhaps an addon for chrome/chromium, maybe conkeror
 this is mostly important for being able to add bookmarks from open tabs/windows
+the other important function of bookmarks is being able to get completions of them in the address bar
 ** synchronisation / data transfer protocol
 chromium exports its bookmarks in a JSON format, this could also be useful for importing data
 ** TODO import existing bookmarks

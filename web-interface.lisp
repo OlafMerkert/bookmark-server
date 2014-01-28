@@ -115,31 +115,31 @@
 (define-easy-handler (bookmarks-js :uri "/bookmarks/logic.js") ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
-      (defun bookmark-new ()
-        (let ((bm-url (@@ ($ "#bookmarkUrl") (val)))
-              (bm-title (@@ ($ "#bookmarkTitle") (val))))
-          ;; todo abort on empty url (title can be autofilled)
-          (@@ $ (ajax
-                 (create url "/bookmarks/bookmark/new"
-                         data (create url bm-url 
-                                      title bm-title)
-                         type "GET" 
-                         ;; todo better feedback on error and success
-                         success (lambda ()
-                                   (alert "New Bookmark created"))
-                         error (lambda ()
-                                 (alert "Failure creating bookmark")))
-                 ;; todo insert bookmark into current display (if successfull)
-                 ))))
+    (defun bookmark-new ()
+      (let ((bm-url (@@ ($ "#bookmarkUrl") (val)))
+            (bm-title (@@ ($ "#bookmarkTitle") (val))))
+        ;; todo abort on empty url (title can be autofilled)
+        (@@ $ (ajax
+               (create url "/bookmarks/bookmark/new"
+                       data (create url bm-url
+                                    title bm-title)
+                       type "GET"
+                       ;; todo better feedback on error and success
+                       success (lambda ()
+                                 (alert "New Bookmark created"))
+                       error (lambda ()
+                               (alert "Failure creating bookmark")))
+               ;; todo insert bookmark into current display (if successfull)
+               ))))
 
-      
+
     ;; selecting bookmarks
     (defvar *selected-bookmark-index* -1)
 
     (defun valid-bookmark-index-p (index)
       (and (<= 0 index)
            (< index (@ ($ ".bookmark") length))))
-      
+
     (defun get-bookmark-at-index (index)
       (let ((bms ($ ".bookmark")))
         (if (valid-bookmark-index-p index)
@@ -182,13 +182,13 @@
 
       ;; setup keyboard bindings
       ($! "body" keydown (event)
-        (@@ event (prevent-default))
+        ;; todo don't do this if inside a form
         (case (@ event which)
-          (80 (bookmark-select-prev)) ; p
-          (78 (bookmark-select-next)) ; n
+          (80 (bookmark-select-prev))   ; p
+          (78 (bookmark-select-next))   ; n
           ))
-      nil
-      )))
+      ;; don't return anything, otherwise we block other important actions
+      (values))))
 
 (define-easy-handler (bookmarks-css :uri "/bookmarks/style.css") ()
   (setf (hunchentoot:content-type*) "text/css")
@@ -197,4 +197,3 @@
     ((".even") (:background "#f2f4f5"))
     ((".hidden") (:display "none"))
     ((".selected") (:background-color "yellow"))))
-

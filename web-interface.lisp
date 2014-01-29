@@ -5,7 +5,8 @@
   (:shadowing-import-from :parenscript #:this #:in)
   (:use :cl :ol :web-utils
         :hunchentoot :cl-who
-        :parenscript)
+        :parenscript
+        :ajax-actions)
   (:export
    #:start-bookmark-server))
 
@@ -73,7 +74,8 @@
                   (unless correct-title
                     (signal 'object-exists :class 'bm:bookmark
                             :object bm
-                            :conflicting-slots (list 'bm:title)))))
+                            :conflicting-slots (list 'bm:title)))
+                  bm))
        ;; conditions to handle, starting with the condition name
        (object-exists (object)          ; slots of the  condition
                       ;; let for the data to transmit to the client
@@ -84,7 +86,7 @@
        ;; finally, the code to run on success, with no
        ;; conditions occurring, again starting with let
        ;; containing data to transmit
-       (:client ((id (bm:id bm)))
+       (:client (bm) ((id (bm:id bm)))
                 (alert "New Bookmark created")
                 ;; todo add the new bookmark to the list
                 ))))

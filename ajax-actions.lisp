@@ -42,16 +42,17 @@
 (defvar ajax-action-js-code (make-hash-table))
 
 (defun jslet-produce-json (bindings)
-  `(with-output-to-string (*json-output*)
-    (json:with-object ()
-      ,@(mapcar
-         (lambda (b)
-           (cond ((symbolp b)
-                  `(json:encode-object-member ',b ,b))
-                 ((consp b)
-                  `(json:encode-object-member ',(first b) ,(second b)))
-                 (t (error "invalid binding ~A in jslet expression" b))))
-         bindings))))
+  (with-gensyms!
+   `(with-output-to-string (,g!stream)
+      (json:with-object (,g!stream)
+        ,@(mapcar
+           (lambda (b)
+             (cond ((symbolp b)
+                    `(json:encode-object-member ',b ,b ,g!stream))
+                   ((consp b)
+                    `(json:encode-object-member ',(first b) ,(second b) ,g!stream))
+                   (t (error "invalid binding ~A in jslet expression" b))))
+           bindings)))))
 
 (defun ajax-action-server-component (breadcrumb action-name ajax-call-server ajax-call-client ajax-call-conditions)
   (with-gensyms!
@@ -60,21 +61,26 @@
            ;; extract the parameters
            ,(mapcar #'symb (odd-elements (first ajax-call-server)))
          (handler-case
-             (progn
-               ,@(rest ajax-call-server)
+             ;; use multiple values to make return of :server part
+             ;; available in the :client part
+             ;; todo perhaps there is a more consistent way even?
+             ;; check out :no-error !!
+             (mvbind ,(first ajax-call-client)
+                 (progn
+                   ,@(rest ajax-call-server))
                ;; handle condition "NONE"
                ,(jslet-produce-json
                  (list* '(:condition 'none)
-                        (first ajax-call-client))))
-           ,(mapcar (lambda (condition)
-                      (dbind (cond-name slots jslet &rest body) condition
-                        (declare (ignore body))
-                        `(,cond-name (,g!condition)
-                                     (with-slots ,slots ,g!condition
-                                       ,(jslet-produce-json
-                                         (list* `(:condition ,cond-name)
-                                                jslet))))))
-                    ajax-call-conditions))))))
+                        (second ajax-call-client))))
+           ,@(mapcar (lambda (condition)
+                       (dbind (cond-name slots jslet &rest body) condition
+                         (declare (ignore body))
+                         `(,cond-name (,g!condition)
+                                      (with-slots ,slots ,g!condition
+                                        ,(jslet-produce-json
+                                          (list* `(condition ',cond-name)
+                                                 jslet))))))
+                     ajax-call-conditions))))))
 
 (defmacro define-ajax-action+ (breadcrumb js-parameters &body js-code)
   (let* ((action-name (apply #'symb (splice-in '- breadcrumb)))
@@ -114,5 +120,5 @@
                                      (symbol-macrolet ,(mapcar #`(,(unbox1 a1) (@ json ,(unbox1 a1))) js-let)
                                        ,@body))))
                                ;; normal condition comes first
-                               (cons (list* 'none nil ajax-call-client)
+                               (cons (list* 'none ajax-call-client)
                                      ajax-call-conditions)))))))))

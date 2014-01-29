@@ -31,30 +31,24 @@
 
 ;;; first all the possible AJAX requests
 
-;; todo integrate error handling
-;; todo can we unify error handling between js and cl?
-
-(define-ajax-action (bookmark delete) (id)
-  (handler-case
-      (prog1 'success
-        (bm:delete-bookmark (bm:bookmark-by-id id)))
-    (bm:db-object-not-found () 'already-deleted)))
+(define-ajax-action+ (bookmark delete) ()
+  (let ((id (selected-bookmark-id)))
+    (ajax-call
+     (:server (:id id)
+              (bm:delete-bookmark (bm:bookmark-by-id id)))
+     (:client () ()
+              (alert "Bookmark deleted")
+              ;; todo update the dom
+              )
+     (bm:db-object-not-found (bm:value) ((id (mkstr bm:value)))
+                             (alert (concatenate 'string "Bookmark with id " id " was already deleted."))))))
 
 (defun parse-categories (categories)
   (when (stringp categories)
     (mapcar #'bookmarks:category-by-id-or-name
             (split-sequence:split-sequence #\, categories))))
 
-(define-ajax-action (bookmark new) (title url categories)
-  ;; todo check for duplicates
-  (mvbind (bm correct-title) (bm:bookmark-by-url url title)
-    (if correct-title
-        (prog1 'success
-          (when categories
-            (bookmarks:assign-bookmark-categories
-             bm (parse-categories categories))))
-        'already-exists)))
-
+;; todo perhaps move this into bookmarks package?
 (define-condition object-exists ()
   ((class :initarg :class
           :initform nil)
@@ -83,6 +77,8 @@
                        (title (bm:title object)))
                       ;; here comes the js code
                       (alert (concatenate 'string "Bookmark exists already, but with title " title)))
+       (bm:empty-parameter (bm:name) ((name (mkstr bm:name)))
+                        (alert (concatenate 'string "Please fill out " name)))
        ;; finally, the code to run on success, with no
        ;; conditions occurring, again starting with let
        ;; containing data to transmit
@@ -91,41 +87,64 @@
                 ;; todo add the new bookmark to the list
                 ))))
 
-(define-ajax-action (bookmark edit) (id title url)
-  (handler-case
-      (let ((bm (bm:bookmark-by-id id)))
-        (setf (bm:title bm) title
-              (bm:url bm) url)
-        (bm:save-changes bm)
-        'success)
-    (bm:db-object-not-found () 'does-not-exist)))
+(define-ajax-action+ (bookmark edit) ()
+  (form-bind (bookmark-id
+              bookmark-url
+              bookmark-title)
+    (ajax-call
+     (:server (:id bookmark-id :url bookmark-url :title bookmark-title)
+              (let ((bm (bm:bookmark-by-id id)))
+                (setf (bm:title bm) title
+                      (bm:url bm) url)
+                (bm:save-changes bm)
+                bm))
+     (:client (bm) ((title (bm:title bm)))
+              (alert (concatenate 'string "Bookmark " title " successfully edited."))
+              ;; todo update the contents of the UI
+              )
+     (bm:db-object-not-found
+      (bm:value) ((id (mkstr bm:value)))
+      (alert (concatenate 'string "Cannot edit deleted bookmark with id " id "."))))))
 
-(define-ajax-action (bookmark category assign) (id categories)
-  ;; todo error handling
-  (bm:assign-bookmark-categories
-   (bm:get-by-id 'bm:bookmark id) (parse-categories categories)))
-
-(define-ajax-action (bookmark category unassign) (id categories)
-  ;; todo error handling
-  (bm:unassign-bookmark-categories
-   (bm:bookmark-by-id id) (parse-categories categories)))
+(bind-multi ((assign assign unassign)
+             (bm:assign-bookmark-categories bm:assign-bookmark-categories bm:unassign-bookmark-categories))
+  (define-ajax-action+ (bookmark category assign) (categories)
+                 (let ((id (selected-bookmark-id)))
+                   (ajax-call
+                    ;; todo currently need categories to be a string
+                    (:server (:id id :categories categories)
+                             (bm:assign-bookmark-categories
+                              (bm:get-by-id 'bm:bookmark id) (parse-categories categories))
+                             (values))
+                    (:client () ()
+                             (alert "Updated categories for bookmark")
+                             ;; todo trigger redisplay if in hierarchy view
+                             )
+                    (bm:db-object-not-found
+                     (bm:value) ((id (mkstr bm:value)))
+                     (alert (concatenate 'string "Cannot alter categories for deleted bookmark with id " id)))))))
 
 ;;; now the main UI
 
+(defmacro cc (symbol-or-string)
+  (cl-json:lisp-to-camel-case (mkstr symbol-or-string)))
+
 (define-easy-handler (bookmarks-list :uri "/bookmarks/list") ()
   (html/document (:title "Bookmarks"
+                         ;; todo use breadcrumbs?
                          :style "/bookmarks/style.css"
                          :script "/scripts/jquery-1.10.2.min.js"
-                         :script "/bookmarks/logic.js")
+                         :script "/bookmarks/logic.js"
+                         :script "/bookmarks/ajax/actions.js")
     (:h1 "Bookmarks")
     ;; Form for creating new bookmarks
-    (:form :id "bookmarkNew"
-           (:input :id "bookmarkId" :type "hidden" :value "")
-           (:input :id "bookmarkTitle" :type "text" :value "")
-           (:input :id "bookmarkUrl" :type "text" :value "")
+    (:form :id (cc bookmark-new)
+           (:input :id (cc bookmark-id) :type "hidden" :value "")
+           (:input :id (cc bookmark-title) :type "text" :value "")
+           (:input :id (cc bookmark-url) :type "text" :value "")
            (:input :type "submit" :value "New"))
     ;; List of present bookmarks
-    (:ul
+    (:ul :id (cc bookmarks-list)
      (let (odd)
        (dolist (bm (bm:all-bookmarks))
          (htm (:li :id (bm:id bm)
@@ -136,27 +155,9 @@
     (:p "Use [p] and [n] keys to select any entry.")))
 
 ;;; todo move generally useful parenscript macros to some utility collection
-(define-easy-handler (bookmarks-js :uri "/bookmarks/logic.js") ()
+(define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
-    (defun bookmark-new ()
-      (form-bind (bookmark-url
-                  bookmark-title)
-        ;; todo abort on empty url (title can be autofilled)
-        (@@ $ (ajax
-               (create url "/bookmarks/bookmark/new"
-                       data (create url bookmark-url
-                                    title bookmark-title)
-                       type "GET"
-                       ;; todo better feedback on error and success
-                       success (lambda ()
-                                 (alert "New Bookmark created"))
-                       error (lambda ()
-                               (alert "Failure creating bookmark")))
-               ;; todo insert bookmark into current display (if successfull)
-               ))))
-
-
     ;; selecting bookmarks
     (defvar *selected-bookmark-index* -1)
 
@@ -190,6 +191,10 @@
       (let ((index  (- *selected-bookmark-index* 1)))
         (if (valid-bookmark-index-p index)
             (bookmark-select index))))
+
+    (defun selected-bookmark-id ()
+      (@@ (get-bookmark-at-index *selected-bookmark-index*)
+          (attr "id")))
 
     ($! document ready ()
       ;; hiding/unhiding url of bookmark

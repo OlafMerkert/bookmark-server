@@ -28,7 +28,11 @@
    #:bookmark-by-url
    #:bookmark-by-id
    #:delete-bookmark
-   #:db-object-not-found))
+   #:db-object-not-found
+   #:class
+   #:column
+   #:value
+   #:empty-parameter))
 
 (in-package :bookmarks)
 

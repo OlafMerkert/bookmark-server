@@ -41,6 +41,14 @@
 
 (defvar ajax-action-js-code (make-hash-table))
 
+(define-easy-handler (ajax-actions-js :uri (breadcrumb->url (append1 breadcrumb-ajax-root "actions.js"))) ()
+  (setf (hunchentoot:content-type*) "text/javascript")
+  (with-output-to-string (stream)
+    (maphash (ilambda (k v)
+               (princ v stream)
+               (terpri stream))
+             ajax-action-js-code)))
+
 (defun jslet-produce-json (bindings)
   (with-gensyms!
    `(with-output-to-string (,g!stream)
@@ -70,7 +78,7 @@
                    ,@(rest ajax-call-server))
                ;; handle condition "NONE"
                ,(jslet-produce-json
-                 (list* '(:condition 'none)
+                 (list* '(:condition "NONE")
                         (second ajax-call-client))))
            ,@(mapcar (lambda (condition)
                        (dbind (cond-name slots jslet &rest body) condition
@@ -78,7 +86,7 @@
                          `(,cond-name (,g!condition)
                                       (with-slots ,slots ,g!condition
                                         ,(jslet-produce-json
-                                          (list* `(condition ',cond-name)
+                                          (list* `(condition ,(mkstr cond-name))
                                                  jslet))))))
                      ajax-call-conditions))))))
 
@@ -120,5 +128,5 @@
                                      (symbol-macrolet ,(mapcar #`(,(unbox1 a1) (@ json ,(unbox1 a1))) js-let)
                                        ,@body))))
                                ;; normal condition comes first
-                               (cons (list* 'none ajax-call-client)
+                               (cons (list* "NONE" ajax-call-client)
                                      ajax-call-conditions)))))))))

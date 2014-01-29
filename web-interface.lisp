@@ -2,7 +2,7 @@
 
 (defpackage :bookmark-web-interface
   (:nicknames :bm-web)
-  (:shadowing-import-from :parenscript :this :in)
+  (:shadowing-import-from :parenscript #:this #:in)
   (:use :cl :ol :web-utils
         :hunchentoot :cl-who
         :parenscript)
@@ -30,11 +30,6 @@
 
 ;;; first all the possible AJAX requests
 
-(defmacro define-ajax-action (breadcrumb parameters &body body)
-  `(define-easy-handler (,(apply #'symb 'ajax- (splice-in '- breadcrumb ))
-                          :uri ,(breadcrumb->url (append bm-root breadcrumb)))
-       ,parameters
-     (format nil "~S" (progn ,@body))))
 ;; todo integrate error handling
 ;; todo can we unify error handling between js and cl?
 
@@ -66,95 +61,6 @@
                       :initform nil)
    (object :initarg :object
            :initform nil)))
-
-(defun tree-find-if (pred tree)
-  (cond ((funcall pred tree) tree)
-        ((consp tree)
-         (or (tree-find-if pred (car tree))
-             (tree-find-if pred (cdr tree))))
-        (t nil)))
-
-(defmacro define-ajax-action+ (breadcrumb js-parameters &body js-code)
-  (let* ((action-name (apply #'symb (splice-in '- breadcrumb)))
-         (ajax-call (tree-find-if (lambda (x) (and (consp x) (eq (car x) 'ajax-call)))
-                                  js-code))
-         (ajax-call-server (assoc1 :server (rest ajax-call)))
-         (ajax-call-client (assoc1 :client (rest ajax-call)))
-         (ajax-call-conditions (remove-if (lambda (x) (keywordp (car x))) (rest ajax-call))))
-    ;; for the js code generation, add the breadcrumb information
-    (setf (car ajax-call) 'ajax-call%
-          (cdr ajax-call) (cons breadcrumb (cdr ajax-call)))
-    `(progn
-       ,(ajax-action-server-component breadcrumb action-name ajax-call-server ajax-call-client ajax-call-conditions)
-       ,(ajax-action-client-component breadcrumb action-name js-parameters js-code))))
-
-(defmacro/ps ajax-call% (breadcrumb &rest handlers)
-  (let ((ajax-call-server (assoc1 :server handlers))
-        (ajax-call-client (assoc1 :client handlers))
-        (ajax-call-conditions (remove-if (lambda (x) (keywordp (car x))) handlers)))
-    `(@@ $ (ajax (create :url ,(breadcrumb->url (append bm-root breadcrumb))
-                         :data (create ,@(first ajax-call-server))
-                         :type "GET"
-                         :error (lambda ()
-                                  (alert ,(format nil "Server-Client communication problem: Action ~A failed" (breadcrumb->url breadcrumb))))
-                         :success
-                         (lambda (json)
-                           (cond
-                             ,@(mapcar
-                               (lambda (condition)
-                                 (dbind (name slots js-let &rest body) condition
-                                   (declare (ignore slots))
-                                   `((= (@ json condition) ,(mkstr name))
-                                     (symbol-macrolet ,(mapcar #`(,(unbox1 a1) (@ json ,(unbox1 a1))) js-let)
-                                       ,@body))))
-                               ;; normal condition comes first
-                               (cons (list* 'none nil ajax-call-client)
-                                     ajax-call-conditions)))))))))
-
-(defun odd-elements (list)
-  (let ((odd t))
-    (remove-if (ilambda (x) (notf odd)) list)))
-
-(defun jslet-produce-json (bindings)
-  `(with-output-to-string (*json-output*)
-    (json:with-object ()
-      ,@(mapcar
-         (lambda (b)
-           (cond ((symbolp b)
-                  `(json:encode-object-member ',b ,b))
-                 ((consp b)
-                  `(json:encode-object-member ',(first b) ,(second b)))
-                 (t (error "invalid binding ~A in jslet expression" b))))
-         bindings))))
-
-(defun ajax-action-server-component (breadcrumb action-name ajax-call-server ajax-call-client ajax-call-conditions)
-  (with-gensyms!
-    (let ((function-name (symb 'ajax-action- action-name)))
-      `(define-easy-handler (,function-name :uri ,(breadcrumb->url (append bm-root breadcrumb)))
-           ;; extract the parameters
-           ,(mapcar #'symb (odd-elements (first ajax-call-server)))
-         (handler-case
-             (progn
-               ,@(rest ajax-call-server)
-               ;; handle condition "NONE"
-               ,(jslet-produce-json
-                 (list* '(:condition 'none)
-                        (first ajax-call-client))))
-           ,(mapcar (lambda (condition)
-                      (dbind (cond-name slots jslet &rest body) condition
-                        (declare (ignore body))
-                        `(,cond-name (,g!condition)
-                                     (with-slots ,slots ,g!condition
-                                       ,(jslet-produce-json
-                                         (list* `(:condition ,cond-name)
-                                                jslet))))))
-                    ajax-call-conditions))))))
-
-(defvar ajax-action-js-code (make-hash-table))
-
-(defun ajax-action-client-component (breadcrumb action-name js-parameters js-code)
-  `(setf (gethash ',action-name ajax-action-js-code)
-         (ps (defun ,action-name ,js-parameters ,@js-code))))
 
 (define-ajax-action+ (bookmark new) ()
     (form-bind (bookmark-url

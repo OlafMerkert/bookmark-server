@@ -6,7 +6,8 @@
                split-sequence
                css-lite
                ;; uiop
-               parenscript)
+               parenscript
+               cl-json)
   :serial t
   :components ((:file "bookmarks")
                (:file "web-interface")))

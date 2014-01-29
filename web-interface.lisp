@@ -85,7 +85,7 @@
     (setf (car ajax-call) 'ajax-call%
           (cdr ajax-call) (cons breadcrumb (cdr ajax-call)))
     `(progn
-       ,(ajax-action-server-component breadcrumb action-name ajax-call-server ajax-call-conditions)
+       ,(ajax-action-server-component breadcrumb action-name ajax-call-server ajax-call-client ajax-call-conditions)
        ,(ajax-action-client-component breadcrumb action-name js-parameters js-code))))
 
 (defmacro/ps ajax-call% (breadcrumb &rest handlers)
@@ -111,8 +111,44 @@
                                (cons (list* 'none nil ajax-call-client)
                                      ajax-call-conditions)))))))))
 
-(defun ajax-action-server-component (breadcrumb action-name ajax-call-server ajax-call-conditions)
- )
+(defun odd-elements (list)
+  (let ((odd t))
+    (remove-if (ilambda (x) (notf odd)) list)))
+
+(defun jslet-produce-json (bindings)
+  `(with-output-to-string (*json-output*)
+    (json:with-object ()
+      ,@(mapcar
+         (lambda (b)
+           (cond ((symbolp b)
+                  `(json:encode-object-member ',b ,b))
+                 ((consp b)
+                  `(json:encode-object-member ',(first b) ,(second b)))
+                 (t (error "invalid binding ~A in jslet expression" b))))
+         bindings))))
+
+(defun ajax-action-server-component (breadcrumb action-name ajax-call-server ajax-call-client ajax-call-conditions)
+  (with-gensyms!
+    (let ((function-name (symb 'ajax-action- action-name)))
+      `(define-easy-handler (,function-name :uri ,(breadcrumb->url (append bm-root breadcrumb)))
+           ;; extract the parameters
+           ,(mapcar #'symb (odd-elements (first ajax-call-server)))
+         (handler-case
+             (progn
+               ,@(rest ajax-call-server)
+               ;; handle condition "NONE"
+               ,(jslet-produce-json
+                 (list* '(:condition 'none)
+                        (first ajax-call-client))))
+           ,(mapcar (lambda (condition)
+                      (dbind (cond-name slots jslet &rest body) condition
+                        (declare (ignore body))
+                        `(,cond-name (,g!condition)
+                                     (with-slots ,slots ,g!condition
+                                       ,(jslet-produce-json
+                                         (list* `(:condition ,cond-name)
+                                                jslet))))))
+                    ajax-call-conditions))))))
 
 (defvar ajax-action-js-code (make-hash-table))
 

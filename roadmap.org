@@ -5,6 +5,22 @@ for bookmarks and categories
 figure out how to write this kind of application
 write some cool macros ;-)
 *** TODO integration of lisp and js code via ajax
+information needed:
+a name for the ajax call
+the parameters and returned information
+condition handling; optimally taking care of both the lisp and js side
+if there is some return data other than condition handling stuff, provide a clear separation between js and lisp, we are bound to have nesting like (js (lisp (js ...)))
+**** js conditions for ajax query
+`complete': when the request is complete
+`error': when complete, but with error
+`success': when complete, and no error
+
+essentially we can always generate a generic error message if something goes wrong `error', and continue code on `success'.
+**** lisp conditions
+might contain data (depending on condition class), which we might want to preprocess on the server side, then we send the data to the client.
+**** js code generation
+we want one single toplevel form for each ajax action, which contains both the js and lisp code, perhaps the js code can be collected somewhere and produced as one single script.
+
 ** convenient input of categories
 provide some autocompletion facility to speed things up
 ** explore UI possibilities

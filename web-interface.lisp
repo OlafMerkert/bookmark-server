@@ -59,6 +59,94 @@
              bm (parse-categories categories))))
         'already-exists)))
 
+(define-condition object-exists ()
+  ((class :initarg :class
+          :initform nil)
+   (conflicting-slots :initarg :conflicting-slots
+                      :initform nil)
+   (object :initarg :object
+           :initform nil)))
+
+(defun tree-find-if (pred tree)
+  (cond ((funcall pred tree) tree)
+        ((consp tree)
+         (or (tree-find-if pred (car tree))
+             (tree-find-if pred (cdr tree))))
+        (t nil)))
+
+(defmacro define-ajax-action+ (breadcrumb js-parameters &body js-code)
+  (let* ((action-name (apply #'symb (splice-in '- breadcrumb)))
+         (ajax-call (tree-find-if (lambda (x) (and (consp x) (eq (car x) 'ajax-call)))
+                                  js-code))
+         (ajax-call-server (assoc1 :server (rest ajax-call)))
+         (ajax-call-client (assoc1 :client (rest ajax-call)))
+         (ajax-call-conditions (remove-if (lambda (x) (keywordp (car x))) (rest ajax-call))))
+    ;; for the js code generation, add the breadcrumb information
+    (setf (car ajax-call) 'ajax-call%
+          (cdr ajax-call) (cons breadcrumb (cdr ajax-call)))
+    `(progn
+       ,(ajax-action-server-component breadcrumb action-name ajax-call-server ajax-call-conditions)
+       ,(ajax-action-client-component breadcrumb action-name js-parameters js-code))))
+
+(defmacro/ps ajax-call% (breadcrumb &rest handlers)
+  (let ((ajax-call-server (assoc1 :server handlers))
+        (ajax-call-client (assoc1 :client handlers))
+        (ajax-call-conditions (remove-if (lambda (x) (keywordp (car x))) handlers)))
+    `(@@ $ (ajax (create :url ,(breadcrumb->url (append bm-root breadcrumb))
+                         :data (create ,@(first ajax-call-server))
+                         :type "GET"
+                         :error (lambda ()
+                                  (alert ,(format nil "Server-Client communication problem: Action ~A failed" (breadcrumb->url breadcrumb))))
+                         :success
+                         (lambda (json)
+                           (cond
+                             ,@(mapcar
+                               (lambda (condition)
+                                 (dbind (name slots js-let &rest body) condition
+                                   (declare (ignore slots))
+                                   `((= (@ json condition) ,(mkstr name))
+                                     (symbol-macrolet ,(mapcar #`(,(unbox1 a1) (@ json ,(unbox1 a1))) js-let)
+                                       ,@body))))
+                               ;; normal condition comes first
+                               (cons (list* 'none nil ajax-call-client)
+                                     ajax-call-conditions)))))))))
+
+(defun ajax-action-server-component (breadcrumb action-name ajax-call-server ajax-call-conditions)
+ )
+
+(defvar ajax-action-js-code (make-hash-table))
+
+(defun ajax-action-client-component (breadcrumb action-name js-parameters js-code)
+  `(setf (gethash ',action-name ajax-action-js-code)
+         (ps (defun ,action-name ,js-parameters ,@js-code))))
+
+(define-ajax-action+ (bookmark new) ()
+    (form-bind (bookmark-url
+                bookmark-title)
+      ;; todo categories
+      (ajax-call
+       ;; here comes the server side lisp code
+       (:server (:url bookmark-url :title bookmark-title)
+                (mvbind (bm correct-title) (bm:bookmark-by-url url title)
+                  (unless correct-title
+                    (signal 'object-exists :class 'bm:bookmark
+                            :object bm
+                            :conflicting-slots (list 'bm:title)))))
+       ;; conditions to handle, starting with the condition name
+       (object-exists (object)          ; slots of the  condition
+                      ;; let for the data to transmit to the client
+                      ((id (bm:id object))
+                       (title (bm:title object)))
+                      ;; here comes the js code
+                      (alert (concatenate 'string "Bookmark exists already, but with title " title)))
+       ;; finally, the code to run on success, with no
+       ;; conditions occurring, again starting with let
+       ;; containing data to transmit
+       (:client ((id (bm:id bm)))
+                (alert "New Bookmark created")
+                ;; todo add the new bookmark to the list
+                ))))
+
 (define-ajax-action (bookmark edit) (id title url)
   (handler-case
       (let ((bm (bm:bookmark-by-id id)))
@@ -112,17 +200,29 @@
   "Install an event handler using jQuery on the solected object."
   `(@@ ($ ,obj) (,handler (lambda ,args ,@body)))))
 
+(defun lisp->camelcase (symbol &optional classp)
+  (let ((capit (string-capitalize (mkstr symbol))))
+    (remove #\- (if classp capit (string-downcase capit :start 0 :end 1)))))
+
+(defmacro/ps form-value (id &optional (value nil value-p))
+  `(@@ ($ ,(mkstr "#" (lisp->camelcase id))) (val ,@(if value-p (list value)))))
+
+(defmacro/ps form-bind (bindings &body body)
+  `(let ,(mapcar #`(,a1 (form-value ,a1)) bindings)
+     ,@body))
+
+
 (define-easy-handler (bookmarks-js :uri "/bookmarks/logic.js") ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
     (defun bookmark-new ()
-      (let ((bm-url (@@ ($ "#bookmarkUrl") (val)))
-            (bm-title (@@ ($ "#bookmarkTitle") (val))))
+      (form-bind (bookmark-url
+                  bookmark-title)
         ;; todo abort on empty url (title can be autofilled)
         (@@ $ (ajax
                (create url "/bookmarks/bookmark/new"
-                       data (create url bm-url
-                                    title bm-title)
+                       data (create url bookmark-url
+                                    title bookmark-title)
                        type "GET"
                        ;; todo better feedback on error and success
                        success (lambda ()

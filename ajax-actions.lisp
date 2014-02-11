@@ -58,19 +58,12 @@
   (with-gensyms!
     `(with-output-to-string (,g!stream)
        (json:with-object (,g!stream)
-         ,@(mapcan (lambda (b)
+         ,@(mapcar (lambda (b)
                      (mvbind (key value)
                          (cond ((symbolp b) (values b b))
                                ((consp b) (values-list b))
                                (t (error "invalid binding ~A in jslet expression" b)))
-                       `((json::next-aggregate-member 'json::object ,g!stream)
-                         ;; write out a string directly, because
-                         ;; cl-json always puts "" around our nice
-                         ;; symbol names
-                         (write-string ,(funcall json:*lisp-identifier-name-to-json* (mkstr key))
-                                       ,g!stream)
-                         (write-char #\: ,g!stream)
-                         (json:encode-json ,value ,g!stream))))
+                       `(json:encode-object-member ',key ,value ,g!stream)))
                    bindings)))))
 
 (defun ajax-action-server-component (breadcrumb action-name ajax-call-server ajax-call-client ajax-call-conditions)
@@ -79,6 +72,7 @@
       `(define-easy-handler (,function-name :uri ,(breadcrumb->url (append breadcrumb-ajax-root breadcrumb)))
            ;; extract the parameters
            ,(mapcar #'symb (odd-elements (first ajax-call-server)))
+         (setf (content-type*) "application/json")
          (handler-case
              ;; use multiple values to make return of :server part
              ;; available in the :client part
@@ -126,18 +120,20 @@
     `(@@ $ (ajax (create url ,(breadcrumb->url (append breadcrumb-ajax-root breadcrumb))
                          data (create ,@(first ajax-call-server))
                          type "GET"
-                         error (lambda ()
-                                 (user-message ,(format nil "Server-Client communication problem: Action ~A failed" (breadcrumb->url breadcrumb))))
+                         data-type "json"
+                         error (lambda (request status)
+                                 (user-message ,(format nil "Server-Client communication problem: Action ~A failed, status: " (breadcrumb->url breadcrumb))
+                                               status))
                          success
                          (lambda (json)
                            (cond
                              ,@(mapcar
                                 (lambda (condition)
                                   (dbind (name slots js-let &rest body) condition
-                                         (declare (ignore slots))
-                                         `((= (@ json condition) ,(mkstr name))
-                                           (symbol-macrolet ,(mapcar #`(,(unbox1 a1) (@ json ,(unbox1 a1))) js-let)
-                                             ,@body))))
+                                    (declare (ignore slots))
+                                    `((= (@ json condition) ,(mkstr name))
+                                      (symbol-macrolet ,(mapcar #`(,(unbox1 a1) (@ json ,(unbox1 a1))) js-let)
+                                        ,@body))))
                                 ;; normal condition comes first
                                 (cons (list* "NONE" ajax-call-client)
                                       ajax-call-conditions))

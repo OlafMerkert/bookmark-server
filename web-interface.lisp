@@ -60,7 +60,6 @@
 (define-ajax-action+ (bookmark new) ()
     (form-bind (bookmark-url
                 bookmark-title)
-      (@@ console (log "create bookmark"))
       ;; todo categories
       (ajax-call
        ;; here comes the server side lisp code

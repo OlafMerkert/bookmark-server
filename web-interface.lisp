@@ -37,11 +37,11 @@
      (:server (:id id)
               (bm:delete-bookmark (bm:bookmark-by-id id)))
      (:client () ()
-              (alert "Bookmark deleted")
+              (user-message "Bookmark deleted")
               ;; todo update the dom
               )
      (bm:db-object-not-found (bm:value) ((id (mkstr bm:value)))
-                             (alert (concatenate 'string "Bookmark with id " id " was already deleted."))))))
+                             (user-message "Bookmark with id " id " was already deleted.")))))
 
 (defun parse-categories (categories)
   (when (stringp categories)
@@ -60,6 +60,7 @@
 (define-ajax-action+ (bookmark new) ()
     (form-bind (bookmark-url
                 bookmark-title)
+      (@@ console (log "create bookmark"))
       ;; todo categories
       (ajax-call
        ;; here comes the server side lisp code
@@ -76,14 +77,14 @@
                       ((id (bm:id object))
                        (title (bm:title object)))
                       ;; here comes the js code
-                      (alert (concatenate 'string "Bookmark exists already, but with title " title)))
+                      (user-message "Bookmark exists already, but with title " title))
        (bm:empty-parameter (bm:name) ((name (mkstr bm:name)))
-                        (alert (concatenate 'string "Please fill out " name)))
+                        (user-message "Please fill out " name))
        ;; finally, the code to run on success, with no
        ;; conditions occurring, again starting with let
        ;; containing data to transmit
        (:client (bm) ((id (bm:id bm)))
-                (alert "New Bookmark created")
+                (user-message "New Bookmark created")
                 ;; todo add the new bookmark to the list
                 ))))
 
@@ -94,17 +95,18 @@
     (ajax-call
      (:server (:id bookmark-id :url bookmark-url :title bookmark-title)
               (let ((bm (bm:bookmark-by-id id)))
+                ;; todo make sure there are no empty strings here
                 (setf (bm:title bm) title
                       (bm:url bm) url)
                 (bm:save-changes bm)
                 bm))
      (:client (bm) ((title (bm:title bm)))
-              (alert (concatenate 'string "Bookmark " title " successfully edited."))
+              (user-message "Bookmark " title " successfully edited.")
               ;; todo update the contents of the UI
               )
      (bm:db-object-not-found
       (bm:value) ((id (mkstr bm:value)))
-      (alert (concatenate 'string "Cannot edit deleted bookmark with id " id "."))))))
+      (user-message "Cannot edit deleted bookmark with id " id ".")))))
 
 (bind-multi ((assign assign unassign)
              (bm:assign-bookmark-categories bm:assign-bookmark-categories bm:unassign-bookmark-categories))
@@ -117,12 +119,12 @@
                               (bm:get-by-id 'bm:bookmark id) (parse-categories categories))
                              (values))
                     (:client () ()
-                             (alert "Updated categories for bookmark")
+                             (user-message "Updated categories for bookmark")
                              ;; todo trigger redisplay if in hierarchy view
                              )
                     (bm:db-object-not-found
                      (bm:value) ((id (mkstr bm:value)))
-                     (alert (concatenate 'string "Cannot alter categories for deleted bookmark with id " id)))))))
+                     (user-message "Cannot alter categories for deleted bookmark with id " id))))))
 
 ;;; now the main UI
 
@@ -134,8 +136,9 @@
                          ;; todo use breadcrumbs?
                          :style "/bookmarks/style.css"
                          :script "/scripts/jquery-1.10.2.min.js"
+                         :script "/bookmarks/ajax/actions.js"
                          :script "/bookmarks/logic.js"
-                         :script "/bookmarks/ajax/actions.js")
+                         )
     (:h1 "Bookmarks")
     ;; Form for creating new bookmarks
     (:form :id (cc bookmark-new)
@@ -158,6 +161,12 @@
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
+   (defun user-message (&rest messages)
+     (let ((message (apply #'concatenate 'string messages)))
+      (@@ console (log message)))
+      (alert message)
+      nil)
+    
     ;; selecting bookmarks
     (defvar *selected-bookmark-index* -1)
 

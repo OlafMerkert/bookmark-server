@@ -118,21 +118,23 @@
   (let ((ajax-call-server (assoc1 :server handlers))
         (ajax-call-client (assoc1 :client handlers))
         (ajax-call-conditions (remove-if (lambda (x) (keywordp (car x))) handlers)))
-    `(@@ $ (ajax (create :url ,(breadcrumb->url (append breadcrumb-ajax-root breadcrumb))
-                         :data (create ,@(first ajax-call-server))
-                         :type "GET"
-                         :error (lambda ()
-                                  (alert ,(format nil "Server-Client communication problem: Action ~A failed" (breadcrumb->url breadcrumb))))
-                         :success
+    `(@@ $ (ajax (create url ,(breadcrumb->url (append breadcrumb-ajax-root breadcrumb))
+                         data (create ,@(first ajax-call-server))
+                         type "GET"
+                         error (lambda ()
+                                 (user-message ,(format nil "Server-Client communication problem: Action ~A failed" (breadcrumb->url breadcrumb))))
+                         success
                          (lambda (json)
                            (cond
                              ,@(mapcar
-                               (lambda (condition)
-                                 (dbind (name slots js-let &rest body) condition
-                                   (declare (ignore slots))
-                                   `((= (@ json condition) ,(mkstr name))
-                                     (symbol-macrolet ,(mapcar #`(,(unbox1 a1) (@ json ,(unbox1 a1))) js-let)
-                                       ,@body))))
-                               ;; normal condition comes first
-                               (cons (list* "NONE" ajax-call-client)
-                                     ajax-call-conditions)))))))))
+                                (lambda (condition)
+                                  (dbind (name slots js-let &rest body) condition
+                                         (declare (ignore slots))
+                                         `((= (@ json condition) ,(mkstr name))
+                                           (symbol-macrolet ,(mapcar #`(,(unbox1 a1) (@ json ,(unbox1 a1))) js-let)
+                                             ,@body))))
+                                ;; normal condition comes first
+                                (cons (list* "NONE" ajax-call-client)
+                                      ajax-call-conditions))
+                             (t (user-message ,(mkstr "Unknown response from "
+                                                      (breadcrumb->url (append breadcrumb-ajax-root breadcrumb))))))))))))

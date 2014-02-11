@@ -51,16 +51,22 @@
 
 (defun jslet-produce-json (bindings)
   (with-gensyms!
-   `(with-output-to-string (,g!stream)
-      (json:with-object (,g!stream)
-        ,@(mapcar
-           (lambda (b)
-             (cond ((symbolp b)
-                    `(json:encode-object-member ',b ,b ,g!stream))
-                   ((consp b)
-                    `(json:encode-object-member ',(first b) ,(second b) ,g!stream))
-                   (t (error "invalid binding ~A in jslet expression" b))))
-           bindings)))))
+    `(with-output-to-string (,g!stream)
+       (json:with-object (,g!stream)
+         ,@(mapcan (lambda (b)
+                     (mvbind (key value)
+                         (cond ((symbolp b) (values b b))
+                               ((consp b) (values-list b))
+                               (t (error "invalid binding ~A in jslet expression" b)))
+                       `((json::next-aggregate-member 'json::object ,g!stream)
+                         ;; write out a string directly, because
+                         ;; cl-json always puts "" around our nice
+                         ;; symbol names
+                         (write-string ,(funcall json:*lisp-identifier-name-to-json* (mkstr key))
+                                       ,g!stream)
+                         (write-char #\: ,g!stream)
+                         (json:encode-json ,value ,g!stream))))
+                   bindings)))))
 
 (defun ajax-action-server-component (breadcrumb action-name ajax-call-server ajax-call-client ajax-call-conditions)
   (with-gensyms!

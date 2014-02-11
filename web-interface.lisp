@@ -87,6 +87,21 @@
                 ;; todo add the new bookmark to the list
                 ))))
 
+;; two actions for editing, one for loading stuff into the form
+;; todo update label of "New/Edit" button
+(define-ajax-action+ (bookmark edit-selected) ()
+  (let ((id (selected-bookmark-id)))
+    (ajax-call
+     (:server (:id id)
+              (bm:bookmark-by-id id))
+     (:client (bm) ((id (bm:id bm)) (title (bm:title bm))(url (bm:url bm)))
+              (form-value bookmark-id id)
+              (form-value bookmark-title title)
+              (form-value bookmark-url url)))))
+
+(defmacro cc (symbol-or-string)
+  (cl-json:lisp-to-camel-case (mkstr symbol-or-string)))
+
 (define-ajax-action+ (bookmark edit) ()
   (form-bind (bookmark-id
               bookmark-url
@@ -102,7 +117,10 @@
      (:client (bm) ((title (bm:title bm)))
               (user-message "Bookmark " title " successfully edited.")
               ;; todo update the contents of the UI
-              )
+              ;; reset form field
+              (form-value bookmark-id "")
+              (form-value bookmark-title "")
+              (form-value bookmark-url ""))
      (bm:db-object-not-found
       (bm:value) ((id (mkstr bm:value)))
       (user-message "Cannot edit deleted bookmark with id " id ".")))))
@@ -110,25 +128,22 @@
 (bind-multi ((assign assign unassign)
              (bm:assign-bookmark-categories bm:assign-bookmark-categories bm:unassign-bookmark-categories))
   (define-ajax-action+ (bookmark category assign) (categories)
-                 (let ((id (selected-bookmark-id)))
-                   (ajax-call
-                    ;; todo currently need categories to be a string
-                    (:server (:id id :categories categories)
-                             (bm:assign-bookmark-categories
-                              (bm:get-by-id 'bm:bookmark id) (parse-categories categories))
-                             (values))
-                    (:client () ()
-                             (user-message "Updated categories for bookmark")
-                             ;; todo trigger redisplay if in hierarchy view
-                             )
-                    (bm:db-object-not-found
-                     (bm:value) ((id (mkstr bm:value)))
-                     (user-message "Cannot alter categories for deleted bookmark with id " id))))))
+    (let ((id (selected-bookmark-id)))
+      (ajax-call
+       ;; todo currently need categories to be a string
+       (:server (:id id :categories categories)
+                (bm:assign-bookmark-categories
+                 (bm:get-by-id 'bm:bookmark id) (parse-categories categories))
+                (values))
+       (:client () ()
+                (user-message "Updated categories for bookmark")
+                ;; todo trigger redisplay if in hierarchy view
+                )
+       (bm:db-object-not-found
+        (bm:value) ((id (mkstr bm:value)))
+        (user-message "Cannot alter categories for deleted bookmark with id " id))))))
 
-;;; now the main UI
 
-(defmacro cc (symbol-or-string)
-  (cl-json:lisp-to-camel-case (mkstr symbol-or-string)))
 
 (define-easy-handler (bookmarks-list :uri "/bookmarks/list") ()
   (html/document (:title "Bookmarks"
@@ -154,7 +169,7 @@
                    (:a :href (bm:url bm) (esc (bm:title bm)))
                    (:br)
                    (:span :class "hidden" (esc (bm:url bm))))))))
-    (:p "Use [p] and [n] keys to select any entry.")))
+    (:p "Use [Alt-p] and [Alt-n] keys to select any entry.")))
 
 ;;; todo move generally useful parenscript macros to some utility collection
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
@@ -203,6 +218,7 @@
       (@@ (get-bookmark-at-index *selected-bookmark-index*)
           (attr "id")))
 
+
     ($! document ready ()
       ;; hiding/unhiding url of bookmark
       ($! ".bookmark" click ()
@@ -211,20 +227,46 @@
               (@@ verbose-url (remove-class "hidden"))
               (@@ verbose-url (add-class "hidden")))))
 
-      ;; creating new bookmark
+      ;; creating new bookmark, respectively edit
       ($! "#bookmarkNew" submit (event)
         (@@ event (prevent-default))
-        (bookmark-new))
+        (if (= 0 (length (form-value bookmark-id)))
+            (bookmark-new)
+            (bookmark-edit)))
 
       ;; setup keyboard bindings
-      ($! "body" keydown (event)
-        ;; todo don't do this if inside a form
-        (case (@ event which)
-          (80 (bookmark-select-prev))   ; p
-          (78 (bookmark-select-next))   ; n
-          ))
+      (bind-keys "body"
+                 ;; todo figure out how to require ALT + key
+                 ;; todo don't do this if inside a form
+                 (p (bookmark-select-prev))
+                 (n (bookmark-select-next))
+                 (d (bookmark-delete))
+                 (e (bookmark-edit-selected)))
+      
       ;; don't return anything, otherwise we block other important actions
       (values))))
+
+(defmacro+ps bind-keys (node &rest bindings)
+  "Every binding ought to have the form (k ..code..)"
+  `($! ,node keydown (event)
+     (case (@ event which)
+       ,@(mapcar (lambda (b)
+                   `(,(js-key-code (first b))
+                      ,@(rest b)))
+                 bindings))))
+
+(defgeneric js-key-code (keybinding))
+
+(defmethod js-key-code ((char character))
+  (+ (char-code char) (- 80 112)))
+
+(defmethod js-key-code ((string string))
+  (js-key-code (char string 0)))
+
+(defmethod js-key-code ((symbol symbol))
+  (js-key-code (char (string-downcase (symbol-name symbol)) 0)))
+
+
 
 (define-easy-handler (bookmarks-css :uri "/bookmarks/style.css") ()
   (setf (hunchentoot:content-type*) "text/css")

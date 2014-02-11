@@ -10,11 +10,16 @@
    #:jslet-produce-json
    #:ajax-action-server-component
    #:ajax-call
-   #:define-ajax-action))
+   #:define-ajax-action
+   #:user-message
+   #:user-message%))
 
 (in-package :ajax-actions)
 
 (defpar breadcrumb-ajax-root '(bookmarks ajax))
+
+(defpsmacro user-message (&rest messages)
+  `(user-message% (concatenate 'string ,@messages)))
 
 (defmacro define-ajax-action (breadcrumb parameters &body body)
   `(define-easy-handler (,(apply #'symb 'ajax- (splice-in '- breadcrumb ))

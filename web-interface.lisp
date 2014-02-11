@@ -161,9 +161,8 @@
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
-   (defun user-message (&rest messages)
-     (let ((message (apply #'concatenate 'string messages)))
-      (@@ console (log message)))
+   (defun user-message% (message)
+     (@@ console (log message))
       (alert message)
       nil)
     

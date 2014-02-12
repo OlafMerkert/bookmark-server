@@ -97,11 +97,13 @@
      (:client (bm) ((id (bm:id bm)) (title (bm:title bm))(url (bm:url bm)))
               (form-value bookmark-id id)
               (form-value bookmark-title title)
-              (form-value bookmark-url url)))))
+              (form-value bookmark-url url)
+              (form-value bookmark-new-submit "Save changes")))))
 
 (defmacro cc (symbol-or-string)
   (cl-json:lisp-to-camel-case (mkstr symbol-or-string)))
 
+;; todo allow aborting editing of a bookmark
 (define-ajax-action+ (bookmark edit) ()
   (form-bind (bookmark-id
               bookmark-url
@@ -120,7 +122,8 @@
               ;; reset form field
               (form-value bookmark-id "")
               (form-value bookmark-title "")
-              (form-value bookmark-url ""))
+              (form-value bookmark-url "")
+              (form-value bookmark-new-submit "New"))
      (bm:db-object-not-found
       (bm:value) ((id (mkstr bm:value)))
       (user-message "Cannot edit deleted bookmark with id " id ".")))))
@@ -159,7 +162,13 @@
            (:input :id (cc bookmark-id) :type "hidden" :value "")
            (:input :id (cc bookmark-title) :type "text" :value "")
            (:input :id (cc bookmark-url) :type "text" :value "")
-           (:input :type "submit" :value "New"))
+           (:input :id (cc bookmark-new-submit) :type "submit" :value "New"))
+    ;; Form for editing and so on
+    (:form :id (cc bookmark-operations)
+           (:button :type "button" :onclick (ps-inline (bookmark-select-prev)) "Previous")
+           (:button :type "button" :onclick (ps-inline (bookmark-select-next)) "Next")
+           (:button :type "button" :onclick (ps-inline (bookmark-edit-selected)) "Edit")
+           (:button :type "button" :onclick (ps-inline (bookmark-delete)) "Delete"))
     ;; List of present bookmarks
     (:ul :id (cc bookmarks-list)
      (let (odd)
@@ -235,13 +244,13 @@
             (bookmark-edit)))
 
       ;; setup keyboard bindings
-      (bind-keys "body"
+      #|(bind-keys "body"
                  ;; todo figure out how to require ALT + key
                  ;; todo don't do this if inside a form
                  (p (bookmark-select-prev))
                  (n (bookmark-select-next))
                  (d (bookmark-delete))
-                 (e (bookmark-edit-selected)))
+                 (e (bookmark-edit-selected)))|#
       
       ;; don't return anything, otherwise we block other important actions
       (values))))

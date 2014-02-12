@@ -100,8 +100,11 @@
               (form-value bookmark-url url)
               (form-value bookmark-new-submit "Save changes")))))
 
-(defmacro cc (symbol-or-string)
+(defmacro/ps cc (symbol-or-string)
   (cl-json:lisp-to-camel-case (mkstr symbol-or-string)))
+
+(defmacro/ps cc# (symbol-or-string)
+  (concatenate 'string "#" (cl-json:lisp-to-camel-case (mkstr symbol-or-string))))
 
 ;; todo allow aborting editing of a bookmark
 (define-ajax-action+ (bookmark edit) ()
@@ -157,6 +160,8 @@
                          :script "/bookmarks/logic.js"
                          )
     (:h1 "Bookmarks")
+    (:a :href (ps-inline (user-message "Hallo du!")) "Give me a message")
+    (:div :id (cc message-container))
     ;; Form for creating new bookmarks
     (:form :id (cc bookmark-new)
            (:input :id (cc bookmark-id) :type "hidden" :value "")
@@ -175,7 +180,7 @@
        (dolist (bm (bm:all-bookmarks))
          (htm (:li :id (bm:id bm)
                    :class (if (notf odd) "bookmark odd" "bookmark even")
-                   (:a :href (bm:url bm) (esc (bm:title bm)))
+                   (:a :href (bm:url bm) :target "_blank" (esc (bm:title bm)))
                    (:br)
                    (:span :class "hidden" (esc (bm:url bm))))))))
     (:p "Use [Alt-p] and [Alt-n] keys to select any entry.")))
@@ -184,10 +189,30 @@
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
-   (defun user-message% (message)
-     (@@ console (log message))
-      (alert message)
+    (defun user-message% (message)
+      (@@ console (log message))
+      (add-message message)
       nil)
+
+    (defun add-message (message-html)
+      (let ((div ($ "<div/>"
+                    (create html message-html
+                            "class" "message")))
+            (dismiss-link ($ "<a/>"
+                             (create html "Dismiss"
+                                     href "#"))))
+        (@@ dismiss-link (append-to div))
+        (@@ div (hide))
+        (@@ div (append-to (cc# message-container)))
+        ($! dismiss-link click (event)
+          (@@ event (prevent-default))
+          ;; fade out
+          (@@ ($ this) (parent)
+              (hide "normal"
+                    (lambda () (@@ ($ this) (remove))))))
+        ;; fade in
+        (@@ div (show "normal"))))
+
     
     ;; selecting bookmarks
     (defvar *selected-bookmark-index* -1)
@@ -245,12 +270,12 @@
 
       ;; setup keyboard bindings
       #|(bind-keys "body"
-                 ;; todo figure out how to require ALT + key
-                 ;; todo don't do this if inside a form
-                 (p (bookmark-select-prev))
-                 (n (bookmark-select-next))
-                 (d (bookmark-delete))
-                 (e (bookmark-edit-selected)))|#
+                 ;; todo figure out how to require ALT + key ; ; ; ;
+                 ;; todo don't do this if inside a form ; ; ; ;
+      (p (bookmark-select-prev))
+      (n (bookmark-select-next))
+      (d (bookmark-delete))
+      (e (bookmark-edit-selected)))|#
       
       ;; don't return anything, otherwise we block other important actions
       (values))))
@@ -283,4 +308,11 @@
     ((".odd") (:background "#f1f6fe"))
     ((".even") (:background "#f2f4f5"))
     ((".hidden") (:display "none"))
-    ((".selected") (:background-color "yellow"))))
+    ((".selected") (:background-color "yellow"))
+    ((".message") ( ;;:background-color "lightgray"
+                   :border "3px double orangered"
+                   :padding "2px"
+                   :margin "2px"
+                   :vertical-align "middle"))
+    ((".message" "a") (:margin-left "5em" :font-size "70%"))
+    ))

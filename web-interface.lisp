@@ -35,11 +35,13 @@
   (let ((id (selected-bookmark-id)))
     (ajax-call
      (:server (:id id)
-              (bm:delete-bookmark (bm:bookmark-by-id id)))
-     (:client () ()
+              (bm:delete-bookmark (bm:bookmark-by-id id))
+              id)
+     (:client (id) ((id (mkstr "#" id)))
               (user-message "Bookmark deleted")
-              ;; todo update the dom
-              )
+              (@@ console (log id))
+              ;; update the dom
+              (hide+remove id))
      (bm:db-object-not-found (bm:value) ((id (mkstr bm:value)))
                              (user-message "Bookmark with id " id " was already deleted.")))))
 
@@ -58,37 +60,49 @@
            :initform nil)))
 
 (define-ajax-action+ (bookmark new) ()
-    (form-bind (bookmark-url
-                bookmark-title)
-      ;; todo categories
-      (ajax-call
-       ;; here comes the server side lisp code
-       (:server (:url bookmark-url :title bookmark-title)
-                (mvbind (bm correct-title) (bm:bookmark-by-url url title)
-                  (unless correct-title
-                    (signal 'object-exists :class 'bm:bookmark
-                            :object bm
-                            :conflicting-slots (list 'bm:title)))
-                  bm))
-       ;; conditions to handle, starting with the condition name
-       (object-exists (object)          ; slots of the  condition
-                      ;; let for the data to transmit to the client
-                      ((id (bm:id object))
-                       (title (bm:title object)))
-                      ;; here comes the js code
-                      (user-message "Bookmark exists already, but with title " title))
-       (bm:empty-parameter (bm:name) ((name (mkstr bm:name)))
-                        (user-message "Please fill out " name))
-       ;; finally, the code to run on success, with no
-       ;; conditions occurring, again starting with let
-       ;; containing data to transmit
-       (:client (bm) ((id (bm:id bm)))
-                (user-message "New Bookmark created")
-                ;; todo add the new bookmark to the list
-                ))))
+  (form-bind (bookmark-url
+              bookmark-title)
+    ;; todo categories
+    (if (length=0 bookmark-url)
+        (user-message "Cannot create bookmark with empty url.")
+        (ajax-call
+         ;; here comes the server side lisp code
+         (:server (:url bookmark-url :title bookmark-title)
+                  (mvbind (bm correct-title) (bm:bookmark-by-url url title)
+                    (unless correct-title
+                      (signal 'object-exists :class 'bm:bookmark
+                              :object bm
+                              :conflicting-slots (list 'bm:title)))
+                    bm))
+         ;; conditions to handle, starting with the condition name
+         (object-exists (object)        ; slots of the  condition
+                        ;; let for the data to transmit to the client
+                        ((id (bm:id object))
+                         (title (bm:title object)))
+                        ;; here comes the js code
+                        (user-message "Bookmark exists already, but with title " title))
+         (bm:empty-parameter (bm:name) ((name (mkstr bm:name)))
+                             (user-message "Please fill out " name))
+         ;; finally, the code to run on success, with no
+         ;; conditions occurring, again starting with let
+         ;; containing data to transmit
+         (:client (bm) ((id (mkstr (bm:id bm))) (title (bm:title bm)) (url (bm:url bm)))
+                  ;; clear the form
+                  (form-value bookmark-title "")
+                  (form-value bookmark-url "")
+                  (user-message "New Bookmark created")
+                  ;; add the new bookmark to the list
+                  (let ((bm-html ($ (who-ps-html
+                                     (:li :id id
+                                          :class "bookmark" ; todo add odd or even accordingly
+                                          (:a :href url :target "_blank" title)
+                                          (:br)
+                                          (:span :class "hidden" url))))))
+                    (@@ bm-html (hide))
+                    (@@ bm-html (append-to (cc# bookmarks-list)))
+                    (@@ bm-html (show "normal"))))))))
 
 ;; two actions for editing, one for loading stuff into the form
-;; todo update label of "New/Edit" button
 (define-ajax-action+ (bookmark edit-selected) ()
   (let ((id (selected-bookmark-id)))
     (ajax-call
@@ -111,25 +125,36 @@
   (form-bind (bookmark-id
               bookmark-url
               bookmark-title)
-    (ajax-call
-     (:server (:id bookmark-id :url bookmark-url :title bookmark-title)
-              (let ((bm (bm:bookmark-by-id id)))
-                ;; todo make sure there are no empty strings here
-                (setf (bm:title bm) title
-                      (bm:url bm) url)
-                (bm:save-changes bm)
-                bm))
-     (:client (bm) ((title (bm:title bm)))
-              (user-message "Bookmark " title " successfully edited.")
-              ;; todo update the contents of the UI
-              ;; reset form field
-              (form-value bookmark-id "")
-              (form-value bookmark-title "")
-              (form-value bookmark-url "")
-              (form-value bookmark-new-submit "New"))
-     (bm:db-object-not-found
-      (bm:value) ((id (mkstr bm:value)))
-      (user-message "Cannot edit deleted bookmark with id " id ".")))))
+    (let ((lt (length=0 bookmark-title))
+          (lu (length=0 bookmark-url)))
+      (if (or lt lu)
+          (progn
+            (when lt (user-message "Cannot clear title of bookmark"))
+            (when lu (user-message "Cannot clear empty bookmark url.")))
+          (ajax-call
+           (:server (:id bookmark-id :url bookmark-url :title bookmark-title)
+                    (let ((bm (bm:bookmark-by-id id)))
+                      ;; todo make sure there are no empty strings here
+                      (setf (bm:title bm) title
+                            (bm:url bm) url)
+                      (bm:save-changes bm)
+                      bm))
+           (:client (bm) ((id (mkstr "#" (bm:id bm))) (title (bm:title bm)) (url (bm:url bm)))
+                    ;; update the contents of the UI
+                    (let ((li ($ id)))
+                      (@@ li (children "a") (eq 0)
+                             (attr "href" url)
+                             (text title))
+                      (@@ li (children "span") (eq 0) (text url)))
+                    (user-message "Bookmark " title " successfully edited.")
+                    ;; reset form field
+                    (form-value bookmark-id "")
+                    (form-value bookmark-title "")
+                    (form-value bookmark-url "")
+                    (form-value bookmark-new-submit "New"))
+           (bm:db-object-not-found
+            (bm:value) ((id (mkstr bm:value)))
+            (user-message "Cannot edit deleted bookmark with id " id ".")))))))
 
 (bind-multi ((assign assign unassign)
              (bm:assign-bookmark-categories bm:assign-bookmark-categories bm:unassign-bookmark-categories))
@@ -189,10 +214,22 @@
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
+    (defun length=0 (string)
+      (= 0 (length string)))
+
     (defun user-message% (message)
       (@@ console (log message))
       (add-message message)
       nil)
+    ;; todo fade out messages automatically after some time, or after
+    ;; new messages come in
+
+    ;; todo new message should appear at the top
+    ;; todo move the message container to the side (should not disturb
+    ;; general layout)
+
+    (defun hide+remove (node)
+      (@@ ($ node) (hide "normal" (lambda () (@@ ($ this) (remove))))))
 
     (defun add-message (message-html)
       (let ((div ($ "<div/>"
@@ -207,12 +244,9 @@
         ($! dismiss-link click (event)
           (@@ event (prevent-default))
           ;; fade out
-          (@@ ($ this) (parent)
-              (hide "normal"
-                    (lambda () (@@ ($ this) (remove))))))
+          (hide+remove (@@ ($ this) (parent))))
         ;; fade in
         (@@ div (show "normal"))))
-
     
     ;; selecting bookmarks
     (defvar *selected-bookmark-index* -1)
@@ -309,6 +343,12 @@
     ((".even") (:background "#f2f4f5"))
     ((".hidden") (:display "none"))
     ((".selected") (:background-color "yellow"))
+    (("#messageContainer")
+     (:position "absolute"
+                :top "20px"
+                :right "20px"
+                :width "30%"
+                :background "khaki"))
     ((".message") ( ;;:background-color "lightgray"
                    :border "3px double orangered"
                    :padding "2px"

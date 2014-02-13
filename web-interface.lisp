@@ -20,6 +20,7 @@
 (defun start-bookmark-server ()
   (bm:connect-database :initialise t)
   (load-web-library :jquery)
+  (load-web-library :jquery-sticky)
   (start-server))
 
 (ew (defpar bm-root '(bookmarks)))
@@ -177,13 +178,14 @@
                          ;; todo use breadcrumbs?
                          :style "/bookmarks/style.css"
                          :script "/scripts/jquery-1.10.2.min.js"
+                         :script "/scripts/sticky/sticky.js"
+                         :style "/scripts/sticky/sticky.css"
                          :script "/scripts/utils.js"
                          :script "/bookmarks/ajax/actions.js"
                          :script "/bookmarks/logic.js"
                          )
     (:h1 "Bookmarks")
     (:a :href (ps-inline (user-message "Hallo du!")) "Give me a message")
-    (:div :id (cc message-container))
     ;; Form for creating new bookmarks
     (:form :id (cc bookmark-new)
            (:input :id (cc bookmark-id) :type "hidden" :value "")
@@ -211,36 +213,6 @@
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
-    (defun user-message% (message)
-      (@@ console (log message))
-      (add-message message)
-      nil)
-    ;; todo fade out messages automatically after some time, or after
-    ;; new messages come in
-
-    ;; todo new message should appear at the top
-    ;; todo move the message container to the side (should not disturb
-    ;; general layout)
-
-    ;; todo find out whether this sort of user message stuff is provided by jquery already
-
-    (defun add-message (message-html)
-      (let ((div ($ "<div/>"
-                    (create html message-html
-                            "class" "message")))
-            (dismiss-link ($ "<a/>"
-                             (create html "Dismiss"
-                                     href "#"))))
-        (@@ dismiss-link (append-to div))
-        (@@ div (hide))
-        (@@ div (append-to (cch message-container)))
-        ($! dismiss-link click (event)
-          (@@ event (prevent-default))
-          ;; fade out
-          (hide+remove (@@ ($ this) (parent))))
-        ;; fade in
-        (@@ div (show "normal"))))
-    
     ;; selecting bookmarks
     (defvar *selected-bookmark-index* -1)
 

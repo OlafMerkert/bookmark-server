@@ -18,9 +18,6 @@
 
 (defpar breadcrumb-ajax-root '(bookmarks ajax))
 
-(defpsmacro user-message (&rest messages)
-  `(user-message% (concatenate 'string ,@messages)))
-
 (defmacro define-ajax-action (breadcrumb parameters &body body)
   `(define-easy-handler (,(apply #'symb 'ajax- (splice-in '- breadcrumb ))
                           :uri ,(breadcrumb->url (append breadcrumb-ajax-root breadcrumb)))

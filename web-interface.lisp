@@ -245,32 +245,32 @@
       (@@ (get-bookmark-at-index *selected-bookmark-index*)
           (attr "id")))
 
-    ($! document ready ()
+    (bind-event document ready ()
       (@@ ($ ".hidden" ) (hide) (css "visibility" "visible"))
       
       ;; hiding/unhiding url of bookmark
-      ($! ".bookmark" mouseover ()
+      (bind-event ".bookmark" mouseover ()
         (@@ ($ this) (find "span") (show)))
-      ($! ".bookmark" mouseout ()
+      (bind-event ".bookmark" mouseout ()
         (@@ ($ this) (find "span") (hide)))
 
-      ($! ".bookmark" click ()
+      (bind-event ".bookmark" click ()
         (bookmark-select (@@ ($ ".bookmark") (index ($ this)))))
 
       ;; creating new bookmark, respectively edit
-      ($! (cch bookmark-new) submit (event)
+      (bind-event (cch bookmark-new) submit (event)
         (@@ event (prevent-default))
         (if (= 0 (length (form-value bookmark-id)))
             (bookmark-new)
             (bookmark-edit)))
 
-      ($! (cch bookmark-form-reset) click ()
+      (bind-event (cch bookmark-form-reset) click ()
         (form-value bookmark-new-submit "New"))
 
       ;; setup keyboard bindings
       #|(bind-keys "body"
-                 ;; todo figure out how to require ALT + key ; ; ; ;
-                 ;; todo don't do this if inside a form ; ; ; ;
+                 ;; todo figure out how to require ALT + key
+                 ;; todo don't do this if inside a form
       (p (bookmark-select-prev))
       (n (bookmark-select-next))
       (d (bookmark-delete))

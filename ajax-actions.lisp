@@ -113,7 +113,7 @@
   `(setf (gethash ',action-name ajax-action-js-code)
          (ps (defun ,action-name ,js-parameters ,@js-code))))
 
-(defmacro/ps ajax-call% (breadcrumb &rest handlers)
+(defpsmacro ajax-call% (breadcrumb &rest handlers)
   (let ((ajax-call-server (assoc1 :server handlers))
         (ajax-call-client (assoc1 :client handlers))
         (ajax-call-conditions (remove-if (lambda (x) (keywordp (car x))) handlers)))

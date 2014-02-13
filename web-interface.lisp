@@ -99,7 +99,7 @@
                                           (:br)
                                           (:span :class "hidden" url))))))
                     (@@ bm-html (hide))
-                    (@@ bm-html (append-to (cc# bookmarks-list)))
+                    (@@ bm-html (append-to (cch bookmarks-list)))
                     (@@ bm-html (show "normal"))))))))
 
 ;; two actions for editing, one for loading stuff into the form
@@ -114,11 +114,7 @@
               (form-value bookmark-url url)
               (form-value bookmark-new-submit "Save changes")))))
 
-(defmacro/ps cc (symbol-or-string)
-  (cl-json:lisp-to-camel-case (mkstr symbol-or-string)))
 
-(defmacro/ps cc# (symbol-or-string)
-  (concatenate 'string "#" (cl-json:lisp-to-camel-case (mkstr symbol-or-string))))
 
 ;; todo allow aborting editing of a bookmark
 (define-ajax-action+ (bookmark edit) ()
@@ -181,6 +177,7 @@
                          ;; todo use breadcrumbs?
                          :style "/bookmarks/style.css"
                          :script "/scripts/jquery-1.10.2.min.js"
+                         :script "/scripts/utils.js"
                          :script "/bookmarks/ajax/actions.js"
                          :script "/bookmarks/logic.js"
                          )
@@ -214,9 +211,6 @@
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
-    (defun length=0 (string)
-      (= 0 (length string)))
-
     (defun user-message% (message)
       (@@ console (log message))
       (add-message message)
@@ -228,8 +222,7 @@
     ;; todo move the message container to the side (should not disturb
     ;; general layout)
 
-    (defun hide+remove (node)
-      (@@ ($ node) (hide "normal" (lambda () (@@ ($ this) (remove))))))
+    ;; todo find out whether this sort of user message stuff is provided by jquery already
 
     (defun add-message (message-html)
       (let ((div ($ "<div/>"
@@ -240,7 +233,7 @@
                                      href "#"))))
         (@@ dismiss-link (append-to div))
         (@@ div (hide))
-        (@@ div (append-to (cc# message-container)))
+        (@@ div (append-to (cch message-container)))
         ($! dismiss-link click (event)
           (@@ event (prevent-default))
           ;; fade out
@@ -313,28 +306,6 @@
       
       ;; don't return anything, otherwise we block other important actions
       (values))))
-
-(defmacro+ps bind-keys (node &rest bindings)
-  "Every binding ought to have the form (k ..code..)"
-  `($! ,node keydown (event)
-     (case (@ event which)
-       ,@(mapcar (lambda (b)
-                   `(,(js-key-code (first b))
-                      ,@(rest b)))
-                 bindings))))
-
-(defgeneric js-key-code (keybinding))
-
-(defmethod js-key-code ((char character))
-  (+ (char-code char) (- 80 112)))
-
-(defmethod js-key-code ((string string))
-  (js-key-code (char string 0)))
-
-(defmethod js-key-code ((symbol symbol))
-  (js-key-code (char (string-downcase (symbol-name symbol)) 0)))
-
-
 
 (define-easy-handler (bookmarks-css :uri "/bookmarks/style.css") ()
   (setf (hunchentoot:content-type*) "text/css")

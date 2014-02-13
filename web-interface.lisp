@@ -33,18 +33,16 @@
 ;;; first all the possible AJAX requests
 
 (define-ajax-action+ (bookmark delete) ()
-  (let ((id (selected-bookmark-id)))
-    (ajax-call
-     (:server (:id id)
-              (bm:delete-bookmark (bm:bookmark-by-id id))
-              id)
-     (:client (id) ((id (mkstr "#" id)))
-              (user-message "Bookmark deleted")
-              (@@ console (log id))
+  (ajax-call
+   (:server (:id (selected-bookmark-id))
+            (bm:delete-bookmark (bm:bookmark-by-id id))
+            id)
+   (:client (id) ((id (mkstr "#" id)))
+            (user-message "Bookmark deleted")
               ;; update the dom
-              (hide+remove id))
-     (bm:db-object-not-found (bm:value) ((id (mkstr bm:value)))
-                             (user-message "Bookmark with id " id " was already deleted.")))))
+            (hide+remove id))
+   (bm:db-object-not-found (bm:value) ((id (mkstr bm:value)))
+                           (user-message "Bookmark with id " id " was already deleted."))))
 
 (defun parse-categories (categories)
   (when (stringp categories)
@@ -89,15 +87,14 @@
          ;; containing data to transmit
          (:client (bm) ((id (mkstr (bm:id bm))) (title (bm:title bm)) (url (bm:url bm)))
                   ;; clear the form
-                  (form-value bookmark-title "")
-                  (form-value bookmark-url "")
-                  (user-message "New Bookmark created")
+                  (reset-bookmark-form)
+                  (user-message "New Bookmark " title " created")
                   ;; add the new bookmark to the list
                   (let ((bm-html ($ (who-ps-html
                                      (:li :id id
                                           :class "bookmark" ; todo add odd or even accordingly
                                           (:a :href url :target "_blank" title)
-                                          (:br)
+                                          ;; (:br)
                                           (:span :class "hidden" url))))))
                     (@@ bm-html (hide))
                     (@@ bm-html (append-to (cch bookmarks-list)))
@@ -105,29 +102,22 @@
 
 ;; two actions for editing, one for loading stuff into the form
 (define-ajax-action+ (bookmark edit-selected) ()
-  (let ((id (selected-bookmark-id)))
-    (ajax-call
-     (:server (:id id)
-              (bm:bookmark-by-id id))
-     (:client (bm) ((id (bm:id bm)) (title (bm:title bm))(url (bm:url bm)))
-              (form-value bookmark-id id)
-              (form-value bookmark-title title)
-              (form-value bookmark-url url)
-              (form-value bookmark-new-submit "Save changes")))))
-
-
+  (ajax-call
+   (:server (:id (selected-bookmark-id))
+            (bm:bookmark-by-id id))
+   (:client (bm) ((id (bm:id bm)) (title (bm:title bm))(url (bm:url bm)))
+            (form-value bookmark-id id)
+            (form-value bookmark-title title)
+            (form-value bookmark-url url)
+            (form-value bookmark-new-submit "Save changes"))))
 
 ;; todo allow aborting editing of a bookmark
 (define-ajax-action+ (bookmark edit) ()
-  (form-bind (bookmark-id
-              bookmark-url
-              bookmark-title)
-    (let ((lt (length=0 bookmark-title))
-          (lu (length=0 bookmark-url)))
+  (form-bind (bookmark-id bookmark-url bookmark-title)
+    (let ((lt (length=0 bookmark-title)) (lu (length=0 bookmark-url)))
       (if (or lt lu)
-          (progn
-            (when lt (user-message "Cannot clear title of bookmark"))
-            (when lu (user-message "Cannot clear empty bookmark url.")))
+          (progn (when lt (user-message "Cannot clear title of bookmark"))
+                 (when lu (user-message "Cannot clear empty bookmark url.")))
           (ajax-call
            (:server (:id bookmark-id :url bookmark-url :title bookmark-title)
                     (let ((bm (bm:bookmark-by-id id)))
@@ -145,10 +135,7 @@
                       (@@ li (children "span") (eq 0) (text url)))
                     (user-message "Bookmark " title " successfully edited.")
                     ;; reset form field
-                    (form-value bookmark-id "")
-                    (form-value bookmark-title "")
-                    (form-value bookmark-url "")
-                    (form-value bookmark-new-submit "New"))
+                    (reset-bookmark-form))
            (bm:db-object-not-found
             (bm:value) ((id (mkstr bm:value)))
             (user-message "Cannot edit deleted bookmark with id " id ".")))))))
@@ -191,7 +178,8 @@
            (:input :id (cc bookmark-id) :type "hidden" :value "")
            (:input :id (cc bookmark-title) :type "text" :value "")
            (:input :id (cc bookmark-url) :type "text" :value "")
-           (:input :id (cc bookmark-new-submit) :type "submit" :value "New"))
+           (:input :id (cc bookmark-new-submit) :type "submit" :value "New")
+           (:input :id (cc bookmark-form-reset) :type "reset" :value "Cancel"))
     ;; Form for editing and so on
     (:form :id (cc bookmark-operations)
            (:button :type "button" :onclick (ps-inline (bookmark-select-prev)) "Previous")
@@ -205,14 +193,20 @@
          (htm (:li :id (bm:id bm)
                    :class (if (notf odd) "bookmark odd" "bookmark even")
                    (:a :href (bm:url bm) :target "_blank" (esc (bm:title bm)))
-                   (:br)
+                   ;; (:br)
                    (:span :class "hidden" (esc (bm:url bm))))))))
-    (:p "Use [Alt-p] and [Alt-n] keys to select any entry.")))
+    ;; (:p "Use [Alt-p] and [Alt-n] keys to select any entry.")
+    ))
 
-;;; todo move generally useful parenscript macros to some utility collection
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
+    (defun reset-bookmark-form ()
+      (form-value bookmark-id "")
+                    (form-value bookmark-title "")
+                    (form-value bookmark-url "")
+                    (form-value bookmark-new-submit "New"))
+
     ;; selecting bookmarks
     (defvar *selected-bookmark-index* -1)
 
@@ -251,21 +245,27 @@
       (@@ (get-bookmark-at-index *selected-bookmark-index*)
           (attr "id")))
 
-
     ($! document ready ()
+      (@@ ($ ".hidden" ) (hide) (css "visibility" "visible"))
+      
       ;; hiding/unhiding url of bookmark
+      ($! ".bookmark" mouseover ()
+        (@@ ($ this) (find "span") (show)))
+      ($! ".bookmark" mouseout ()
+        (@@ ($ this) (find "span") (hide)))
+
       ($! ".bookmark" click ()
-        (let ((verbose-url (@@ ($ this) (find "span"))))
-          (if (@@ verbose-url (has-class "hidden"))
-              (@@ verbose-url (remove-class "hidden"))
-              (@@ verbose-url (add-class "hidden")))))
+        (bookmark-select (@@ ($ ".bookmark") (index ($ this)))))
 
       ;; creating new bookmark, respectively edit
-      ($! "#bookmarkNew" submit (event)
+      ($! (cch bookmark-new) submit (event)
         (@@ event (prevent-default))
         (if (= 0 (length (form-value bookmark-id)))
             (bookmark-new)
             (bookmark-edit)))
+
+      ($! (cch bookmark-form-reset) click ()
+        (form-value bookmark-new-submit "New"))
 
       ;; setup keyboard bindings
       #|(bind-keys "body"
@@ -284,7 +284,12 @@
   (css-lite:css
     ((".odd") (:background "#f1f6fe"))
     ((".even") (:background "#f2f4f5"))
-    ((".hidden") (:display "none"))
+    ((".hidden") (:visibility "hidden"
+                              :margin-right "1em"
+                              :display "block"
+                              :float "right"
+                              :text-align "right"
+                              :color "gray"))
     ((".selected") (:background-color "yellow"))
     (("#messageContainer")
      (:position "absolute"
@@ -292,10 +297,4 @@
                 :right "20px"
                 :width "30%"
                 :background "khaki"))
-    ((".message") ( ;;:background-color "lightgray"
-                   :border "3px double orangered"
-                   :padding "2px"
-                   :margin "2px"
-                   :vertical-align "middle"))
-    ((".message" "a") (:margin-left "5em" :font-size "70%"))
     ))

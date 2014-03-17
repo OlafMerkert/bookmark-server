@@ -7,7 +7,8 @@
                css-lite
                ;; uiop
                parenscript
-               cl-json)
+               cl-json
+               cl-containers)
   :serial t
   :components ((:file "bookmarks")
                (:file "chrome-import")

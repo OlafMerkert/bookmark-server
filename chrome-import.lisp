@@ -15,10 +15,10 @@
   (let ((type (assoc1 :type json)))
     (cond ((equal type "folder")
            (mapc #'collect-bookmarks-from-json
-                   (assoc1 :children json)))
+                 (assoc1 :children json)))
           ((equal type "url")
-           (bm:bookmark-by-url (assoc1 :url json)
-                               (assoc1 :name json))))))
+           (bm:add-bookmark (assoc1 :url json)
+                            (assoc1 :name json))))))
 
 (defun import-chrome-bookmarks ()
   (let ((json (cl-json:decode-json-from-source chrome-bookmark-file)))

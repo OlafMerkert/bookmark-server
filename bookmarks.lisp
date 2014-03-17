@@ -2,16 +2,19 @@
 
 (defpackage :bookmarks
   (:nicknames :bm)
-  (:use :cl :ol :iterate)
-  (:export))
+  (:use :cl :ol :iterate
+        :cl-containers)
+  (:export
+   #:add-bookmark))
 
 (defpackage :bookmark-categories
   (:nicknames :cat))
 
 (in-package :bookmarks)
 
-(defvar bookmarks (make-array 2000 :adjustable t :fill-pointer 0))
+(defvar bookmarks (make-container 'simple-associative-container))
 
+;; todo timestamp for url?? -> sort by date
 (defclass bookmark ()
   ((title :initarg :title
           :initform ""
@@ -74,6 +77,10 @@
 (defun update-categories (variant bm)
   (setf (slot-value bm variant) (compute-categories variant bm)))
 
+(defun update-all-categories (bm)
+  (dolist (variant '(title-categories url-categories auto-categories categories))
+    (update-categories variant bm)))
+
 (defmethod compute-categories ((variant (eql 'categories)) (bm bookmark))
   ;; todo keep categories sorted.  
   (with-slots #1=(user-categories title-categories url-categories auto-categories) bm
@@ -84,7 +91,7 @@
         auto-cats
         (create-flag t))
     (labels ((insert (x) (setf (gethash x category-set) t))
-             (insert-list (list) (mapc #'insert list))
+             (insert-list% (list) (mapc #'insert list))
              (add-cat (x) (unless (gethash x category-set)
                             (insert x)
                             (push x auto-cats)
@@ -94,12 +101,42 @@
                     (add-cat it))))
       ;; load the stuff available  so far
       (dolist (variant '(user-categories title-categories url-categories))
-        (insert-list (slot-value bm variant)))
+        (insert-list% (slot-value bm variant)))
       ;; fixpoint iteration on the logic
       (do () ((not create-flag))
         (setf create-flag nil)
         (mapc #'apply-logic category-logic))
       auto-cats)))
+
+(defun remove* (list sequence &key test)
+  (if (null list)
+      sequence
+      (remove* (cdr list) (remove (car list) sequence :test test) :test test)))
+
+
+(defmacro! create-category-logic (formula)
+  ;; formulas can contain `and', `or' and `not'
+  (let ((variables (remove* '(and or not) (flatten formula) :test #'eq)))
+    `(lambda (,g!table)
+       (let ,(mapcar #`(,a1 (gethash ',a1 ,g!table)) variables)
+         ,formula))))
+;; todo do we allow creation of rules at runtime? that might require a
+;; different approach
+
+(defun get-bookmark (url)
+  (item-at bookmarks url))
+
+(define-condition bookmark-exists ()
+  ((bookmark :initarg :bookmark
+             :reader bookmark)))
+
+(defun add-bookmark (url &optional (title "") categories)
+  (aif (get-bookmark url)
+       (error 'bookmark-exists :bookmark it))
+  ;; todo error recovery strategy?
+  (let ((bm (make-instance 'bookmark :url url :title title :user-categories categories)))
+    (update-all-categories bm)
+    (setf (item-at bookmarks url) bm)))
 
 
 

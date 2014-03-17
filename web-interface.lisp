@@ -282,8 +282,8 @@
 (define-easy-handler (bookmarks-css :uri "/bookmarks/style.css") ()
   (setf (hunchentoot:content-type*) "text/css")
   (css-lite:css
-    ((".odd") (:background "#f1f6fe"))
-    ((".even") (:background "#f2f4f5"))
+    ;; ((".odd") (:background "#f1f6fe"))
+    ;; ((".even") (:background "#f2f4f5"))
     ((".hidden") (:visibility "hidden"
                               :margin-right "1em"
                               :display "block"

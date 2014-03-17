@@ -132,6 +132,13 @@
   (if initialise
       (initialise-database)))
 
+(defun clear-database (confirm)
+  (when (eq confirm :confirm)
+    (delete-records :from 'bookmark)
+    (delete-records :from 'bookmark-category)
+    (delete-records :from 'category)
+    t))
+
 ;;; often used selects
 (define-condition db-object-not-found ()
   ((class :initarg :class
@@ -191,9 +198,10 @@
          (values bm (string= (title bm) title)))
        (values (add 'bookmark :title title :url url) t)))
 
+;; todo add-bookmark function with restart to handle existing bookmarks
+
 (defun bookmark-by-id (id)
   (get-by-id 'bookmark id))
-
 
 (defun save-changes (object)
   (update-records-from-instance object))
@@ -205,6 +213,7 @@
                     :where [= [id] id])))
 
 (defun delete-bookmark (bm)
+  ;;(error "Please don't delete me :-(")
   (let ((id (id bm)))
     (delete-records :from 'bookmark-category
                     :where [= [bookmark-id] id])

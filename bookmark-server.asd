@@ -10,5 +10,6 @@
                cl-json)
   :serial t
   :components ((:file "bookmarks")
+               (:file "chrome-import")
                (:file "ajax-actions")
                (:file "web-interface")))

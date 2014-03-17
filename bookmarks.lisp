@@ -1,171 +1,113 @@
+(in-package :cl-user)
+
 (defpackage :bookmarks
   (:nicknames :bm)
-  (:use :cl :ol :iterate
-        :clsql)
-  (:export
-   #:connect-database
-   #:bookmark
-   #:title
-   #:url
-   #:categories
-   #:category
-   #:name
-   #:bookmarks
-   #:all-bookmarks
-   #:all-categories
-   #:add
-   #:get-category-by-id
-   #:id
-   #:get-by-id
-   #:save-changes
-   #:delete-object
-   #:assign-bookmark-category
-   #:unassign-bookmark-category
-   #:assign-bookmark-categories
-   #:unassign-bookmark-categories
-   #:category-by-name
-   #:category-by-id-or-name
-   #:bookmark-by-url
-   #:bookmark-by-id
-   #:delete-bookmark
-   #:db-object-not-found
-   #:class
-   #:column
-   #:value
-   #:empty-parameter))
+  (:use :cl :ol :iterate)
+  (:export))
+
+(defpackage :bookmark-categories
+  (:nicknames :cat))
 
 (in-package :bookmarks)
 
-(file-enable-sql-reader-syntax)
+(defvar bookmarks (make-array 2000 :adjustable t :fill-pointer 0))
 
-(defparameter bookmarks-database-path
-  #P "/var/tmp/bookmarks-database.sqlite")
-
-(setf *default-caching* nil)
-
-(def-view-class bookmark ()
-  ((id :db-kind :key
-       :db-constraints :not-null
-       :type integer
-       :initform (sequence-next 'bookmark-id-seq)
-       :accessor id)
-   (title :initarg :title
-          :accessor title
-          :type (string 100))
+(defclass bookmark ()
+  ((title :initarg :title
+          :initform ""
+          :accessor title)
    (url :initarg :url
-        :accessor url
-        :type (string 200))
-   (categories :accessor categories%
-               :db-kind :join
-               :db-info (:join-class bookmark-category
-                                     :home-key id
-                                     :foreign-key bookmark-id
-                                     :target-slot category
-                                     :set t)))
-  (:base-table bookmark))
+        :initform "http://"
+        :accessor url)
+   (user-categories :initarg :user-categories
+                    :initform nil
+                    :accessor user-categories)
+   title-categories
+   url-categories
+   auto-categories
+   (categories :accessor categories)))
 
-(defun categories (bookmark)
-  (mapcar #'first (categories% bookmark)))
+(create-standard-print-object bookmark title url (user-categories))
 
+(defvar title->category nil)
 
-;; todo figure out why we get a pair with the join class
+(defpar url->category '(|cat::SimHQ|
+                        |cat::ImDB|
+                        |cat::youtube|
+                        |cat::wikipedia|
+                        |cat::GitHub|))
 
-(create-standard-print-object bookmark (id) title url)
-
-(def-view-class category ()
-  ((id :db-kind :key
-       :db-constraints :not-null
-       :type integer
-       :initform (sequence-next 'category-id-seq)
-       :accessor id)
-   (name :initarg :name
-         :accessor name
-         :type (string 100))
-   (bookmarks :accessor bookmarks%
-              :db-kind :join
-              :db-info (:join-class bookmark-category
-                                    :home-key id
-                                    :foreign-key category-id
-                                    :target-slot bookmark
-                                    :set t)))
-  (:base-table category))
-
-(defun bookmarks (category)
-  (mapcar #'first (bookmarks% category)))
+(defvar category-logic nil)
 
 
-(create-standard-print-object category (id) name)
+(defmethod match ((variant (eql 'title-categories)) t->c title)
+  (if (search (car t->c) title :test #'string-equal)
+      (cdr t->c)
+      nil))
+
+(defmethod match ((variant (eql 'url-categories)) u->c url)
+  (match 'title-categories (cons (symbol-name u->c) u->c)
+         (split-sequence-element url #\/ 2)))
+
+(define-condition split-sequence-overflow ()
+  (sequence separator index))
+
+(defun split-sequence-element (sequence separator index &key test)
+  (labels ((next-position (start)
+             (position separator sequence :start start :test test))
+           (nth-position (start n)
+             (if (zerop n) start
+                 (nth-position (+ 1 (or (next-position start)
+                                        (error 'split-sequence-overflow :sequence sequence :separator separator :index index))) (- n 1)))))
+    (let* ((begin-elt (nth-position 0 index))
+           (end-elt (next-position begin-elt)))
+      (subseq sequence begin-elt end-elt))))
+
+(defmethod compute-categories ((variant (eql 'title-categories)) (bm bookmark))
+  (with-slots (title) bm
+    (filter (lambda (x) (match variant x title)) title->category)))
+
+(defmethod compute-categories ((variant (eql 'url-categories)) (bm bookmark))
+  (with-slots (url) bm
+    (filter (lambda (x) (match variant x url)) url->category)))
+
+(defun update-categories (variant bm)
+  (setf (slot-value bm variant) (compute-categories variant bm)))
+
+(defmethod compute-categories ((variant (eql 'categories)) (bm bookmark))
+  ;; todo keep categories sorted.  
+  (with-slots #1=(user-categories title-categories url-categories auto-categories) bm
+              (append . #1#)))
+
+(defmethod compute-categories ((variant (eql 'auto-categories)) (bm bookmark))
+  (let ((category-set (make-hash-table))
+        auto-cats
+        (create-flag t))
+    (labels ((insert (x) (setf (gethash x category-set) t))
+             (insert-list (list) (mapc #'insert list))
+             (add-cat (x) (unless (gethash x category-set)
+                            (insert x)
+                            (push x auto-cats)
+                            (setf create-flag t)))
+             (apply-logic (logic)
+               (aif (funcall logic category-set)
+                    (add-cat it))))
+      ;; load the stuff available  so far
+      (dolist (variant '(user-categories title-categories url-categories))
+        (insert-list (slot-value bm variant)))
+      ;; fixpoint iteration on the logic
+      (do () ((not create-flag))
+        (setf create-flag nil)
+        (mapc #'apply-logic category-logic))
+      auto-cats)))
 
 
-(def-view-class bookmark-category ()
-  ((bookmark-id :initarg :bookmark-id
-                :accessor bookmark-id
-                :type integer
-                :db-constraints :not-null)
-   (category-id :initarg :category-id
-                :accessor category-id
-                :type integer
-                :db-constraints :not-null)
-   ;; todo constraint on both columns
-   (bookmark :db-kind :join
-             :db-info (:join-class bookmark
-                                   :home-key bookmark-id
-                                   :foreign-key id
-                                   :retrieval :immediate))
-   (category :db-kind :join
-             :db-info (:join-class category
-                                   :home-key category-id
-                                   :foreign-key id
-                                   :retrieval :immediate)))
-  (:base-table bookmark-category))
-
-(defun initialise-database ()
-  (dolist (sequence '(bookmark-id-seq category-id-seq))
-    (unless (sequence-exists-p sequence)
-      (create-sequence sequence)))
-  (dolist (table '(bookmark category bookmark-category))
-    (unless (table-exists-p table)
-      (create-view-from-class table))))
-
-(defun connect-database (&key initialise)
-  (connect (list bookmarks-database-path) :database-type :sqlite3)
-  (if initialise
-      (initialise-database)))
-
-(defun clear-database (confirm)
-  (when (eq confirm :confirm)
-    (delete-records :from 'bookmark)
-    (delete-records :from 'bookmark-category)
-    (delete-records :from 'category)
-    t))
-
-;;; often used selects
-(define-condition db-object-not-found ()
-  ((class :initarg :class
-          :initform nil)
-   (column :initarg :column
-           :initform nil)
-   (value :initarg :value
-          :initform nil)))
 
 (defun all-bookmarks ()
-  (select 'bookmark :order-by [title]
-          :flatp t :refresh t))
+  bookmarks)
 
-(defun all-categories ()
-  (select 'category :order-by [name]
-          :flatp t :refresh t))
 
-(defun add (&rest args)
-  (let ((obj (apply #'make-instance args)))
-    (update-records-from-instance obj)
-    obj))
-
-(defun get-by-id (class id)
-  (aif (select class :where [= [id] id] :flatp t)
-       (first it)
-       (error 'db-object-not-found :class class :column 'id :value id)))
-
+;;; some utility functions
 (define-condition empty-parameter ()
   ((name :initarg :name
          :initform nil)))
@@ -176,75 +118,8 @@
                    (error 'empty-parameter :name ',a1))
                params)))
 
-(defun category-by-name (name)
-  (ensure-non-empty-param name)
-  (aif (select 'category :where [= [name] name] :flatp t)
-       (first it)
-       (add 'category :name name)))
-
 (defun parse-positive-integer (string)
   (if (every #'digit-char-p string)
       (parse-integer string)))
 
-(defun category-by-id-or-name (id-or-name)
-  (aif (parse-positive-integer id-or-name)
-       (get-by-id 'category it)
-       (category-by-name id-or-name)))
 
-(defun bookmark-by-url (url &optional (title ""))
-  (ensure-non-empty-param url)
-  (aif (select 'bookmark :where [= [url] url] :flatp t)
-       (let ((bm (first it)))
-         (values bm (string= (title bm) title)))
-       (values (add 'bookmark :title title :url url) t)))
-
-;; todo add-bookmark function with restart to handle existing bookmarks
-
-(defun bookmark-by-id (id)
-  (get-by-id 'bookmark id))
-
-(defun save-changes (object)
-  (update-records-from-instance object))
-
-(defun delete-object (object)
-  (let ((class (class-name-of object))
-        (id (id object)))
-    (delete-records :from class
-                    :where [= [id] id])))
-
-(defun delete-bookmark (bm)
-  ;;(error "Please don't delete me :-(")
-  (let ((id (id bm)))
-    (delete-records :from 'bookmark-category
-                    :where [= [bookmark-id] id])
-    (delete-records :from 'bookmark
-                    :where [= [id] id])))
-
-
-;;; categories and bookmarks
-(defun assign-bookmark-category (bookmark category)
-  "return T if assignment was created, NIL if already present."
-  (let ((bid (id bookmark)) (cid (id category)))
-    (unless (select 'bookmark-category
-                    :where [and [= [bookmark-id] bid] [= [category-id] cid]])
-      (let ((x (make-instance 'bookmark-category
-                              :bookmark-id bid
-                              :category-id cid)))
-        (save-changes x)
-        (update-instance-from-records bookmark)
-        (update-instance-from-records category))
-      t)))
-
-(defun assign-bookmark-categories (bookmark categories)
-  (mapc (clambda (assign-bookmark-category bookmark x!category)) categories))
-
-
-(defun unassign-bookmark-category (bookmark category)
-  (let ((bid (id bookmark)) (cid (id category)))
-    (prog1 (delete-records :from 'bookmark-category
-                           :where [and [= [bookmark-id] bid] [= [category-id] cid]])
-      (update-instance-from-records bookmark)
-      (update-instance-from-records category))))
-
-(defun unassign-bookmark-categories (bookmark categories)
-  (mapc (clambda (unassign-bookmark-category bookmark x!category)) categories))

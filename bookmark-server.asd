@@ -12,4 +12,5 @@
   :components ((:file "bookmarks")
                (:file "chrome-import")
                (:file "ajax-actions")
-               (:file "web-interface")))
+               ;; (:file "web-interface")
+               ))

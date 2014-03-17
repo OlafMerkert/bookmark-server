@@ -17,8 +17,11 @@
            (mapc #'collect-bookmarks-from-json
                  (assoc1 :children json)))
           ((equal type "url")
-           (bm:add-bookmark (assoc1 :url json)
-                            (assoc1 :name json))))))
+           (handler-case (bm:add-bookmark (assoc1 :url json)
+                                          (assoc1 :name json))
+             (bm:bookmark-exists ()
+               ;; just ignore duplicate bookmarks
+               ))))))
 
 (defun import-chrome-bookmarks ()
   (let ((json (cl-json:decode-json-from-source chrome-bookmark-file)))

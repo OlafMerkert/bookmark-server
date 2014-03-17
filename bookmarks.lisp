@@ -173,11 +173,48 @@
     (update-all-categories bm)
     (setf (item-at bookmarks url) bm)))
 
+(defun update-all-bookmark-categories ()
+  (iterate-key-value bookmarks
+                     (ilambda (k bm) (update-all-categories bm))))
+
 
 
 (defun all-bookmarks ()
   bookmarks)
 
+(defun all-categories ()
+  (let (categories)
+    (iterate-key-value bookmarks
+                       (ilambda (k bm) (aif (categories bm) (push it categories))))
+    (remove-duplicates (flatten categories))))
+;; todo keep track of all used categories (want this for
+;; autocompletion and stuff)
+
+
+;; saving/loading bookmarks from custom JSON
+(defun save-bookmarks (pathname)
+  (with-open-file (stream pathname :direction :output :if-exists :supersede)
+    ;; todo
+    (cl-json:with-array (stream)
+      (iterate-key-value
+       bookmarks
+       (ilambda (key bm)
+         (cl-json:as-array-member (stream)
+           (cl-json:with-object (stream)
+             (cl-json:encode-object-member 'url (url bm) stream)
+             (cl-json:encode-object-member 'title (title bm) stream)
+             (cl-json:encode-object-member 'categories
+                                           (mapcar #'symbol-value (user-categories bm))
+                                           stream))))))))
+
+(defun load-bookmarks (pathname)
+  (let ((json (cl-json:decode-json-from-source pathname)))
+    ;; todo
+    (mapc (lambda (bm)
+            (alist-bind (url title categories) bm
+              (add-bookmark url title categories)))
+          json)
+    bookmarks))
 
 ;;; some utility functions
 (define-condition empty-parameter ()

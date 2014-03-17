@@ -40,9 +40,11 @@
   c)
 
 (defun cat (category)
-  (if (symbolp category)
-      category
-      (intern category :cat)))
+  (cond ((symbolp category)
+         category)
+        ((stringp category)
+         (intern category :cat))
+        (t (error "Unknown category identifier ~A" category))))
 
 (defun mkcat (x)
   (cond ((and (consp x) (symbolp (cdr x)))
@@ -103,11 +105,11 @@
 
 (defmethod compute-categories ((variant (eql 'title-categories)) (bm bookmark))
   (with-slots (title) bm
-    (filter (lambda (x) (match variant x title)) title->category)))
+    (ol:filter (lambda (x) (match variant x title)) title->category)))
 
 (defmethod compute-categories ((variant (eql 'url-categories)) (bm bookmark))
   (with-slots (url) bm
-    (filter (lambda (x) (match variant x url)) url->category)))
+    (ol:filter (lambda (x) (match variant x url)) url->category)))
 
 (defun update-categories (variant bm)
   (setf (slot-value bm variant) (compute-categories variant bm)))
@@ -161,9 +163,39 @@
 (defun get-bookmark (url)
   (item-at bookmarks url))
 
+(defgeneric edit-bookmark (bookmark prop new-value))
+;; todo perhaps better to use generalised variables??
+
+(defmethod edit-bookmark ((bm bookmark) (prop (eql 'url)) (new-value string))
+  (setf (slot-value bm prop) new-value)
+  (update-categories 'url-categories bm)
+  (update-categories 'auto-categories bm)
+  (update-categories 'categories bm))
+
+(defmethod edit-bookmark ((bm bookmark) (prop (eql 'title)) (new-value string))
+  (setf (slot-value bm prop) new-value)
+  (update-categories 'title-categories bm)
+  (update-categories 'auto-categories bm)
+  (update-categories 'categories bm))
+
+(defmethod edit-bookmark ((bm bookmark) (prop (eql 'url+title)) (new-value cons))
+  (setf (slot-value bm 'url) (car new-value)
+        (slot-value bm 'title) (cdr new-value))
+  (update-all-categories bm))
+
+(defmethod edit-bookmark ((bm bookmark) (prop (eql 'user-categories)) (new-value list))
+  (setf (slot-value bm prop) (mapcar #'cat new-value))
+  (update-categories 'auto-categories bm)
+  (update-categories 'categories bm))
+
+
 (define-condition bookmark-exists ()
   ((bookmark :initarg :bookmark
              :reader bookmark)))
+
+(defmethod edit-bookmark ((bm string) prop new-value)
+  (edit-bookmark (get-bookmark bm) prop new-value))
+
 
 (defun add-bookmark (url &optional (title "") categories)
   (aif (get-bookmark url)

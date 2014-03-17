@@ -5,14 +5,16 @@
   (:use :cl :ol :iterate
         :cl-containers)
   (:export
-   #:add-bookmark))
+   #:add-bookmark
+   #:bookmark-exists))
 
 (defpackage :bookmark-categories
   (:nicknames :cat))
 
 (in-package :bookmarks)
 
-(defvar bookmarks (make-container 'simple-associative-container))
+(defvar bookmarks (make-container 'simple-associative-container
+                                  :test 'equal))
 
 ;; todo timestamp for url?? -> sort by date
 (defclass bookmark ()
@@ -32,25 +34,58 @@
 
 (create-standard-print-object bookmark title url (user-categories))
 
-(defvar title->category nil)
+(defun recons (a d c)
+  (setf (car c) a
+        (cdr c) d)
+  c)
 
-(defpar url->category '(|cat::SimHQ|
-                        |cat::ImDB|
-                        |cat::youtube|
-                        |cat::wikipedia|
-                        |cat::GitHub|))
+(defun cat (category)
+  (if (symbolp category)
+      category
+      (intern category :cat)))
+
+(defun mkcat (x)
+  (cond ((and (consp x) (symbolp (cdr x)))
+         x)
+        ((and (consp x) (stringp (cdr x)))
+         (recons (car x) (cat (cdr x)) x))
+        ((symbolp x) (cons (symbol-value x) x))
+        ((stringp x) (cons x (cat x)))
+        (t (error "invalid title->category spec ~A" x))))
+
+
+(defpar title->category
+    (mapcar #'mkcat
+            '("ARMA"
+              "DCS"
+              "lisp"
+              "Warthog"
+              ("A-10" . "Warthog")
+              ("A10" . "Warthog")
+              "Blackshark"
+              ("black shark" . "Blackshark")
+              ("Ka-50" . "Blackshark")
+              )))
+
+(defpar url->category
+    (mapcar #'cat
+            '("SimHQ"
+              "ImDB"
+              "youtube"
+              "wikipedia"
+              "GitHub")))
 
 (defvar category-logic nil)
 
-
 (defmethod match ((variant (eql 'title-categories)) t->c title)
-  (if (search (car t->c) title :test #'string-equal)
+  (if (search (car t->c) title :test #'char-equal)
       (cdr t->c)
       nil))
 
 (defmethod match ((variant (eql 'url-categories)) u->c url)
-  (match 'title-categories (cons (symbol-name u->c) u->c)
-         (split-sequence-element url #\/ 2)))
+  (handler-case (match 'title-categories (cons (symbol-name u->c) u->c)
+                       (split-sequence-element url #\/ 2))
+    (split-sequence-overflow () nil)))
 
 (define-condition split-sequence-overflow ()
   (sequence separator index))

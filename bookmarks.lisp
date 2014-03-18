@@ -9,7 +9,14 @@
         :cl-containers)
   (:export
    #:add-bookmark
-   #:bookmark-exists))
+   #:bookmark-exists
+   #:all-bookmarks
+   #:bookmarks-in-category
+   #:bookmark
+   #:title
+   #:url
+   #:categories
+   #:user-categories))
 
 (defpackage :bookmark-categories
   (:nicknames :cat))
@@ -33,7 +40,7 @@
    title-categories
    url-categories
    auto-categories
-   (categories :accessor categories)))
+   (categories :reader categories)))
 
 (create-standard-print-object bookmark title url (user-categories))
 
@@ -88,7 +95,7 @@
       nil))
 
 (defmethod match ((variant (eql 'url-categories)) u->c url)
-  (handler-case (match 'title-categories (cons (symbol-name u->c) u->c)
+  (handler-case (match 'title-categories u->c
                        (split-sequence-element url #\/ 2))
     (split-sequence-overflow () nil)))
 
@@ -124,7 +131,7 @@
 (defmethod compute-categories ((variant (eql 'categories)) (bm bookmark))
   ;; todo keep categories sorted.  
   (with-slots #1=(user-categories title-categories url-categories auto-categories) bm
-              (append . #1#)))
+              (remove-duplicates (append . #1#))))
 
 (defmethod compute-categories ((variant (eql 'auto-categories)) (bm bookmark))
   (let ((category-set (make-hash-table))
@@ -154,12 +161,13 @@
       (remove* (cdr list) (remove (car list) sequence :test test) :test test)))
 
 
-(defmacro! create-category-logic (formula)
+(defmacro! create-category-logic (formula category)
   ;; formulas can contain `and', `or' and `not'
   (let ((variables (remove* '(and or not) (flatten formula) :test #'eq)))
     `(lambda (,g!table)
        (let ,(mapcar #`(,a1 (gethash ',a1 ,g!table)) variables)
-         ,formula))))
+         (when ,formula
+           ',(cat category))))))
 ;; todo do we allow creation of rules at runtime? that might require a
 ;; different approach
 
@@ -214,14 +222,30 @@
 
 
 
-(defun all-bookmarks ()
-  bookmarks)
+(defun all-bookmarks (&optional predicate)
+  (let (bms)
+    (iterate-key-value bookmarks
+                       (ilambda (k bm) (when (or (not predicate)
+                                            (funcall predicate bm))
+                                    (push bm bms))))
+    bms))
+
+(defun bookmarks-in-category (category)
+  (all-bookmarks (lambda (bm) (member category (categories bm) :test 'eq))))
+
 
 (defun all-categories ()
   (let (categories)
     (iterate-key-value bookmarks
                        (ilambda (k bm) (aif (categories bm) (push it categories))))
     (remove-duplicates (flatten categories))))
+
+(defun all-known-categories ()
+  (let (categories)
+    (do-symbols (s :bookmark-categories)
+      (push s categories))
+    categories))
+
 ;; todo keep track of all used categories (want this for
 ;; autocompletion and stuff)
 

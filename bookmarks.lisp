@@ -77,17 +77,112 @@
               "Blackshark"
               ("black shark" . "Blackshark")
               ("Ka-50" . "Blackshark")
+              "FSX"
+              "test"
+              ("review" . "test")
+              "math"
+              "Feynman"
+              "algebra"
+              "geometry"
+              "manual"
+              "News"
+              ("Nachrichten" . "News")
+              "bug"
+              "Karl May"
+              "Rowan Atkinson"
+              "Comic"
+              ("Cartoon" . "Comic")
+              ("TV Series" . "TV")
+              "dansk"
+              ("Danmark" . "dansk")
+              ("Dänisch" . "dansk")
+              ("Dänemark" . "dansk")
+              ("det nye talkshow" . "dansk")
+              "simulator"
+              ("simu" . "simulator")
+              "python"
+              "numpy"
+              "scipy"
+              "pyqt"
+              "gtk"
+              ("eclm" . "lisp")
+              "clim"
+              "blog"
+              "proof"
+              "wetter"
+              ("meteo" . "wetter")
+              ("prevision" . "wetter")
+              "dict"
+              ("wörterbuch" . "dict")
+              "museum"
+              ("museen" . "museum")
+              "garten"
+              "flug"
+              ("flight" . "flug")
+              ("flieger" . "flug")
+              ("fighter jet" . "flug")
+              ("gunship" . "heli")
+              "heli"
+              ("hubschrauber" . "heli")
+              "airport"
+              ("aeroporto" . "airport")
+              ("flughafen" . "airport")
+              "modell"
+              ("model" . "modell")
+              "buch"
+              "fahrrad"
+              ("rad" . "fahrrad")
+              ("bike" . "fahrrad")
+              "git"
+              "blender"
+              "photoshop"
+              "emacs"
+              "howto"
+              ("how to" . "howto")
+              ("how-to" . "howto")
+              "fedora"
+              "debian"
+              "arch"
+              "windows"
+              "linux"
+              "gentoo"
+              "ubuntu"
+              "program"
               )))
 
 (defpar url->category
-    (mapcar #'cat
+    (mapcar #'mkcat
             '("SimHQ"
               "ImDB"
               "youtube"
               "wikipedia"
-              "GitHub")))
+              "GitHub"
+              "Unibas"
+              "SNS"
+              "gutenberg"
+              "amazon"
+              "geizhals"
+              (".dk" . "dansk")
+              ("digitalcombatsimulator" . "DCS")
+              "forums"
+              ("eagle.ru" . "DCS")
+              ("bistudio.com" . "ARMA")
+              "cliki"
+              ("ted.com" . "TEDtalk")
+              "lisp"
+              ("blogspot" . "blog")
+              "arxiv"
+              "wetter"
+              ("meteo" . "wetter")
+              "math"
+              "sourceforge"
+              "emacswiki"
+              "armaholic"
+              )))
 
-(defvar category-logic nil)
+(defpar category-logic
+    (list (create-category-logic cat::|cliki| cat::|lisp|)
+          (create-category-logic cat::|clim| cat::|lisp|)))
 
 (defmethod match ((variant (eql 'title-categories)) t->c title)
   (if (search (car t->c) title :test #'char-equal)

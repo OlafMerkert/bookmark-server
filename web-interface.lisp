@@ -49,6 +49,7 @@
     (bookmark/document (:title "All bookmarks as list")
       ;; todo Form for creating new bookmarks
       ;; List of present bookmarks
+      (:p (:a :href "/bookmarks/tree" "Tree View"))
       (category-filters (bm:all-known-categories) category)
       (:div :id (cc bookmarks-list)
             (mapc #'single-bookmark (aif category
@@ -61,6 +62,7 @@
     (bookmark/document (:title "All bookmarks as tree")
       ;; todo Form for creating new bookmarks
       ;; List of present bookmarks
+      (:p (:a :href "/bookmarks/list" "List View"))
       (category-filters (bm:all-known-categories) category)
       (:div :id (cc bookmarks-tree)
             (labels ((render-bm-tree (tree)
@@ -84,7 +86,8 @@
   (html/node
     (:div :class "categories filters"
           (dolist (c categories)
-            (htm (:a :href (conc "?category=" (symbol-name c))
+            (htm (:a :href (if (eq c active) "?"
+                               (conc "?category=" (symbol-name c)))
                      :class (if (eq c active) "selected-category" "")
                      (str c))
                  (str " ")))))
@@ -135,7 +138,9 @@
     (defun add-category-ui (bm category)
       (let ((cat-el ($ (who-ps-html (:a :class "category" :href "#" category)))))
         (@@ cat-el (click category-click))
-        (@@ bm (children ".categories") (append " ") (append cat-el))))
+        (@@ bm (children ".categories") (append " ") (append cat-el))
+        ;; todo add to filter list??
+        ))
 
     (bind-event document ready ()
       (bind-event "button.add-tag" click ()
@@ -169,7 +174,25 @@
                    :padding "3pt"
                    :border "solid gray 1px"))
     (("span.categories") (:margin-left "2ex"))
-    ((".categories") (
+    (("span.categories") (
+                      :font-size "80%")
+     ;; todo macro for generating link styling
+     (("a:link") (
+                  :color "orange"
+                  :text-decoration "none"))
+     (("a:visited") (
+                     :color "orange"
+                     :text-decoration "none"))
+     (("a:focus") (
+                   :color "orange"
+                   :text-decoration "none"))
+     (("a:hover") (
+                   :color "orange"
+                   :text-decoration "none"))
+     (("a:active") (
+                    :color "orange"
+                           :text-decoration "none")))
+    (("div.categories") (
                       :font-size "80%")
      ;; todo macro for generating link styling
      (("a:link") (
@@ -187,10 +210,6 @@
      (("a:active") (
                     :color "orange"
                     :text-decoration "none")))
-    (("a.category") (
-                
-                 
-                     ))
     (("legend.categories") (
                             :font-size "90%"
                             :color "darkred"))

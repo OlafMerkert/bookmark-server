@@ -45,11 +45,12 @@
      ,@body))
 
 
-(define-easy-handler (bookmarks-list :uri "/bookmarks/list") ()
+(define-easy-handler (bookmarks-list :uri "/bookmarks/list") (category)
   (bookmark/document (:title "All bookmarks as list")
     ;; todo Form for creating new bookmarks
     ;; List of present bookmarks
     (:br)
+    ;; todo display list of categories for quick filtering
     (:table :id (cc bookmarks-table)
             (dolist (bm (bm:all-bookmarks))
               (htm
@@ -71,18 +72,25 @@
     ;; List of present bookmarks
     (:br)
     (:table :id (cc bookmarks-table)
-            (dolist (bm (bm:all-bookmarks))
-              (htm
-               (:tr :class "bookmark"
-                    (:td :class "bookmark-link" 
-                         (:a :target "_blank" :href (bm:url bm)
-                             (esc (bm:title bm))))
-                    (:td :class "categories"
-                         (dolist (c (bm:categories bm))
-                           (str c)
-                           (str " ")))
-                    (:td :class "url"
-                         (:span :class ".hidden"(esc (bm:url bm))))))))
+            (labels ((render-bm-tree (tree)
+                       (cond ((null tree))
+                             ((atom tree)
+                              (htm (:div :class "bookmark"
+                                         (:a :target "_blank" :href (bm:url tree)
+                                             (esc (bm:title tree)))
+                                         (str " ")
+                                         (:span :class "categories"
+                                                (dolist (c (bm:categories tree))
+                                                  (str c)
+                                                  (str " ")) ))))
+                             ((symbolp (car tree))
+                              (htm (:fieldset :class "category"
+                                              (:legend :class "categories"
+                                                       (str (car tree)))
+                                              (render-bm-tree (cdr tree)))))
+                             (t (render-bm-tree (car tree))
+                                (render-bm-tree (cdr tree))))))
+              (render-bm-tree (bm-tree:build-tree (bm:all-bookmarks)))))
     ))
 
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
@@ -118,9 +126,26 @@
     ((".categories") (
                       :font-size "80%"
                       :color "orange"))
+    (("legend.categories") (
+                            :font-size "90%"
+                            :color "darkred"))
     (("table") (:border-collapse "collapse"))
     (("td") (
              :border "solid 1px lightgray"
-             :padding "2px"
-             ))
-    ))
+             :padding "2px"))
+    ((".bookmark") ()
+     (("a:link") (
+                  :color "blue"
+                  :text-decoration "none"))
+     (("a:visited") (
+                     :color "darkblue"
+                     :text-decoration "none"))
+     (("a:focus") (
+                   :color "blue"
+                   :text-decoration "underline"))
+     (("a:hover") (
+                   :color "blue"
+                   :text-decoration "underline"))
+     (("a:active") (
+                    :color "red"
+                    :text-decoration "underline"))) ))

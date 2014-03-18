@@ -12,6 +12,7 @@
   :serial t
   :components ((:file "bookmarks")
                (:file "chrome-import")
+               (:file "bookmark-tree")
                (:file "ajax-actions")
                ;; (:file "web-interface")
                ))

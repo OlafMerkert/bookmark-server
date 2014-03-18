@@ -2,6 +2,9 @@
 
 (defpackage :bookmarks
   (:nicknames :bm)
+  (:shadowing-import-from :cl-containers
+                          #:enqueue #:dequeue
+                          #:filter #:finish)
   (:use :cl :ol :iterate
         :cl-containers)
   (:export

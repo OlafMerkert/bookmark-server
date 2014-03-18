@@ -18,7 +18,6 @@
   (register-web-application "Bookmark Server" "/bookmarks"))
 
 (defun start-bookmark-server ()
-  (bm:connect-database :initialise t)
   (load-web-library :jquery)
   (load-web-library :jquery-sticky)
   (start-server))
@@ -30,271 +29,98 @@
     (:h1 #1#)
     (:p "View the " (:a :href (breadcrumb->url '(bookmarks list)) "list") " of bookmarks.")))
 
-;;; first all the possible AJAX requests
-
-(define-ajax-action+ (bookmark delete) ()
-  (ajax-call
-   (:server (:id (selected-bookmark-id))
-            (bm:delete-bookmark (bm:bookmark-by-id id))
-            id)
-   (:client (id) ((id (mkstr "#" id)))
-            (user-message "Bookmark deleted")
-              ;; update the dom
-            (hide+remove id))
-   (bm:db-object-not-found (bm:value) ((id (mkstr bm:value)))
-                           (user-message "Bookmark with id " id " was already deleted."))))
-
-(defun parse-categories (categories)
-  (when (stringp categories)
-    (mapcar #'bookmarks:category-by-id-or-name
-            (split-sequence:split-sequence #\, categories))))
-
-;; todo perhaps move this into bookmarks package?
-(define-condition object-exists ()
-  ((class :initarg :class
-          :initform nil)
-   (conflicting-slots :initarg :conflicting-slots
-                      :initform nil)
-   (object :initarg :object
-           :initform nil)))
-
-(define-ajax-action+ (bookmark new) ()
-  (form-bind (bookmark-url
-              bookmark-title)
-    ;; todo categories
-    (if (length=0 bookmark-url)
-        (user-message "Cannot create bookmark with empty url.")
-        (ajax-call
-         ;; here comes the server side lisp code
-         (:server (:url bookmark-url :title bookmark-title)
-                  (mvbind (bm correct-title) (bm:bookmark-by-url url title)
-                    (unless correct-title
-                      (signal 'object-exists :class 'bm:bookmark
-                              :object bm
-                              :conflicting-slots (list 'bm:title)))
-                    bm))
-         ;; conditions to handle, starting with the condition name
-         (object-exists (object)        ; slots of the  condition
-                        ;; let for the data to transmit to the client
-                        ((id (bm:id object))
-                         (title (bm:title object)))
-                        ;; here comes the js code
-                        (user-message "Bookmark exists already, but with title " title))
-         (bm:empty-parameter (bm:name) ((name (mkstr bm:name)))
-                             (user-message "Please fill out " name))
-         ;; finally, the code to run on success, with no
-         ;; conditions occurring, again starting with let
-         ;; containing data to transmit
-         (:client (bm) ((id (mkstr (bm:id bm))) (title (bm:title bm)) (url (bm:url bm)))
-                  ;; clear the form
-                  (reset-bookmark-form)
-                  (user-message "New Bookmark " title " created")
-                  ;; add the new bookmark to the list
-                  (let ((bm-html ($ (who-ps-html
-                                     (:li :id id
-                                          :class "bookmark" ; todo add odd or even accordingly
-                                          (:a :href url :target "_blank" title)
-                                          ;; (:br)
-                                          (:span :class "hidden" url))))))
-                    (@@ bm-html (hide))
-                    (@@ bm-html (append-to (cch bookmarks-list)))
-                    (@@ bm-html (show "normal"))))))))
-
-;; two actions for editing, one for loading stuff into the form
-(define-ajax-action+ (bookmark edit-selected) ()
-  (ajax-call
-   (:server (:id (selected-bookmark-id))
-            (bm:bookmark-by-id id))
-   (:client (bm) ((id (bm:id bm)) (title (bm:title bm))(url (bm:url bm)))
-            (form-value bookmark-id id)
-            (form-value bookmark-title title)
-            (form-value bookmark-url url)
-            (form-value bookmark-new-submit "Save changes"))))
-
-;; todo allow aborting editing of a bookmark
-(define-ajax-action+ (bookmark edit) ()
-  (form-bind (bookmark-id bookmark-url bookmark-title)
-    (let ((lt (length=0 bookmark-title)) (lu (length=0 bookmark-url)))
-      (if (or lt lu)
-          (progn (when lt (user-message "Cannot clear title of bookmark"))
-                 (when lu (user-message "Cannot clear empty bookmark url.")))
-          (ajax-call
-           (:server (:id bookmark-id :url bookmark-url :title bookmark-title)
-                    (let ((bm (bm:bookmark-by-id id)))
-                      ;; todo make sure there are no empty strings here
-                      (setf (bm:title bm) title
-                            (bm:url bm) url)
-                      (bm:save-changes bm)
-                      bm))
-           (:client (bm) ((id (mkstr "#" (bm:id bm))) (title (bm:title bm)) (url (bm:url bm)))
-                    ;; update the contents of the UI
-                    (let ((li ($ id)))
-                      (@@ li (children "a") (eq 0)
-                             (attr "href" url)
-                             (text title))
-                      (@@ li (children "span") (eq 0) (text url)))
-                    (user-message "Bookmark " title " successfully edited.")
-                    ;; reset form field
-                    (reset-bookmark-form))
-           (bm:db-object-not-found
-            (bm:value) ((id (mkstr bm:value)))
-            (user-message "Cannot edit deleted bookmark with id " id ".")))))))
-
-(bind-multi ((assign assign unassign)
-             (bm:assign-bookmark-categories bm:assign-bookmark-categories bm:unassign-bookmark-categories))
-  (define-ajax-action+ (bookmark category assign) (categories)
-    (let ((id (selected-bookmark-id)))
-      (ajax-call
-       ;; todo currently need categories to be a string
-       (:server (:id id :categories categories)
-                (bm:assign-bookmark-categories
-                 (bm:get-by-id 'bm:bookmark id) (parse-categories categories))
-                (values))
-       (:client () ()
-                (user-message "Updated categories for bookmark")
-                ;; todo trigger redisplay if in hierarchy view
-                )
-       (bm:db-object-not-found
-        (bm:value) ((id (mkstr bm:value)))
-        (user-message "Cannot alter categories for deleted bookmark with id " id))))))
-
+(defmacro bookmark/document ((&key title) &body body)
+  `(html/document (:title ,title
+                          ;; todo use breadcrumbs?
+                          :style "/bookmarks/style.css"
+                          :script "/scripts/jquery-1.10.2.min.js"
+                          :script "/scripts/sticky/sticky.js"
+                          :style "/scripts/sticky/sticky.css"
+                          :script "/scripts/utils.js"
+                          :script "/bookmarks/ajax/actions.js"
+                          :script "/bookmarks/logic.js"
+                          )
+     (:h1 ,title)
+     (:a :href (ps-inline (user-message "Hallo du!")) "Give me a message")
+     ,@body))
 
 
 (define-easy-handler (bookmarks-list :uri "/bookmarks/list") ()
-  (html/document (:title "Bookmarks"
-                         ;; todo use breadcrumbs?
-                         :style "/bookmarks/style.css"
-                         :script "/scripts/jquery-1.10.2.min.js"
-                         :script "/scripts/sticky/sticky.js"
-                         :style "/scripts/sticky/sticky.css"
-                         :script "/scripts/utils.js"
-                         :script "/bookmarks/ajax/actions.js"
-                         :script "/bookmarks/logic.js"
-                         )
-    (:h1 "Bookmarks")
-    (:a :href (ps-inline (user-message "Hallo du!")) "Give me a message")
-    ;; Form for creating new bookmarks
-    (:form :id (cc bookmark-new)
-           (:input :id (cc bookmark-id) :type "hidden" :value "")
-           (:input :id (cc bookmark-title) :type "text" :value "")
-           (:input :id (cc bookmark-url) :type "text" :value "")
-           (:input :id (cc bookmark-new-submit) :type "submit" :value "New")
-           (:input :id (cc bookmark-form-reset) :type "reset" :value "Cancel"))
-    ;; Form for editing and so on
-    (:form :id (cc bookmark-operations)
-           (:button :type "button" :onclick (ps-inline (bookmark-select-prev)) "Previous")
-           (:button :type "button" :onclick (ps-inline (bookmark-select-next)) "Next")
-           (:button :type "button" :onclick (ps-inline (bookmark-edit-selected)) "Edit")
-           (:button :type "button" :onclick (ps-inline (bookmark-delete)) "Delete"))
+  (bookmark/document (:title "All bookmarks as list")
+    ;; todo Form for creating new bookmarks
     ;; List of present bookmarks
-    (:ul :id (cc bookmarks-list)
-     (let (odd)
-       (dolist (bm (bm:all-bookmarks))
-         (htm (:li :id (bm:id bm)
-                   :class (if (notf odd) "bookmark odd" "bookmark even")
-                   (:a :href (bm:url bm) :target "_blank" (esc (bm:title bm)))
-                   ;; (:br)
-                   (:span :class "hidden" (esc (bm:url bm))))))))
-    ;; (:p "Use [Alt-p] and [Alt-n] keys to select any entry.")
+    (:br)
+    (:table :id (cc bookmarks-table)
+            (dolist (bm (bm:all-bookmarks))
+              (htm
+               (:tr :class "bookmark"
+                    (:td :class "bookmark-link" 
+                         (:a :target "_blank" :href (bm:url bm)
+                             (esc (bm:title bm))))
+                    (:td :class "categories"
+                         (dolist (c (bm:categories bm))
+                           (str c)
+                           (str " ")))
+                    #|(:td :class "url"
+                         (:span :class ".hidden"(esc (bm:url bm))))|#))))
+    ))
+
+(define-easy-handler (bookmarks-tree :uri "/bookmarks/tree") ()
+  (bookmark/document (:title "All bookmarks as tree")
+    ;; todo Form for creating new bookmarks
+    ;; List of present bookmarks
+    (:br)
+    (:table :id (cc bookmarks-table)
+            (dolist (bm (bm:all-bookmarks))
+              (htm
+               (:tr :class "bookmark"
+                    (:td :class "bookmark-link" 
+                         (:a :target "_blank" :href (bm:url bm)
+                             (esc (bm:title bm))))
+                    (:td :class "categories"
+                         (dolist (c (bm:categories bm))
+                           (str c)
+                           (str " ")))
+                    (:td :class "url"
+                         (:span :class ".hidden"(esc (bm:url bm))))))))
     ))
 
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
-    (defun reset-bookmark-form ()
-      (form-value bookmark-id "")
-                    (form-value bookmark-title "")
-                    (form-value bookmark-url "")
-                    (form-value bookmark-new-submit "New"))
-
-    ;; selecting bookmarks
-    (defvar *selected-bookmark-index* -1)
-
-    (defun valid-bookmark-index-p (index)
-      (and (<= 0 index)
-           (< index (@ ($ ".bookmark") length))))
-
-    (defun get-bookmark-at-index (index)
-      (let ((bms ($ ".bookmark")))
-        (if (valid-bookmark-index-p index)
-            (@@ bms (eq index))
-            (@@ bms (eq 0)))))
-
-    (defun bookmark-select (index)
-      (unless (= *selected-bookmark-index* index)
-        ;; first remove the mark from previous selection
-        (@@ (get-bookmark-at-index *selected-bookmark-index*)
-            (remove-class "selected"))
-        ;; then add the mark to the next
-        (@@ (get-bookmark-at-index index)
-            (add-class "selected"))
-        (setf *selected-bookmark-index* index)))
-    ;; fix highlighting
-
-    (defun bookmark-select-next ()
-      (let ((index  (+ *selected-bookmark-index* 1)))
-        (if (valid-bookmark-index-p index)
-            (bookmark-select index))))
-
-    (defun bookmark-select-prev ()
-      (let ((index  (- *selected-bookmark-index* 1)))
-        (if (valid-bookmark-index-p index)
-            (bookmark-select index))))
-
-    (defun selected-bookmark-id ()
-      (@@ (get-bookmark-at-index *selected-bookmark-index*)
-          (attr "id")))
-
     (bind-event document ready ()
       (@@ ($ ".hidden" ) (hide) (css "visibility" "visible"))
       
       ;; hiding/unhiding url of bookmark
       (bind-event ".bookmark" mouseover ()
-        (@@ ($ this) (find "span") (show)))
+        (@@ ($ this) (find ".hidden") (show)))
       (bind-event ".bookmark" mouseout ()
-        (@@ ($ this) (find "span") (hide)))
-
-      (bind-event ".bookmark" click ()
-        (bookmark-select (@@ ($ ".bookmark") (index ($ this)))))
-
-      ;; creating new bookmark, respectively edit
-      (bind-event (cch bookmark-new) submit (event)
-        (@@ event (prevent-default))
-        (if (= 0 (length (form-value bookmark-id)))
-            (bookmark-new)
-            (bookmark-edit)))
-
-      (bind-event (cch bookmark-form-reset) click ()
-        (form-value bookmark-new-submit "New"))
-
-      ;; setup keyboard bindings
-      #|(bind-keys "body"
-                 ;; todo figure out how to require ALT + key
-                 ;; todo don't do this if inside a form
-      (p (bookmark-select-prev))
-      (n (bookmark-select-next))
-      (d (bookmark-delete))
-      (e (bookmark-edit-selected)))|#
-      
-      ;; don't return anything, otherwise we block other important actions
+        (@@ ($ this) (find ".hidden") (hide)))
       (values))))
 
 (define-easy-handler (bookmarks-css :uri "/bookmarks/style.css") ()
   (setf (hunchentoot:content-type*) "text/css")
   (css-lite:css
-    ;; ((".odd") (:background "#f1f6fe"))
-    ;; ((".even") (:background "#f2f4f5"))
-    ((".hidden") (:visibility "hidden"
-                              :margin-right "1em"
-                              :display "block"
-                              :float "right"
-                              :text-align "right"
-                              :color "gray"))
+    ((".hidden") (
+                  :visibility "hidden"
+                  :margin-right "1em"
+                  :display "block"
+                  :float "right"
+                  :text-align "right"
+                  :color "gray"))
     ((".selected") (:background-color "yellow"))
-    (("#messageContainer")
-     (:position "absolute"
-                :top "20px"
-                :right "20px"
-                :width "30%"
-                :background "khaki"))
+    (("#messageContainer") (
+                            :position "absolute"
+                            :top "20px"
+                            :right "20px"
+                            :width "30%"
+                            :background "khaki"))
+    ((".categories") (
+                      :font-size "80%"
+                      :color "orange"))
+    (("table") (:border-collapse "collapse"))
+    (("td") (
+             :border "solid 1px lightgray"
+             :padding "2px"
+             ))
     ))

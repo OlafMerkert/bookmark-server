@@ -41,26 +41,28 @@
                           :script "/bookmarks/logic.js"
                           )
      (:h1 ,title)
-     (:a :href (ps-inline (user-message "Hallo du!")) "Give me a message")
      ,@body))
 
 
 (define-easy-handler (bookmarks-list :uri "/bookmarks/list") (category)
-  (bookmark/document (:title "All bookmarks as list")
-    ;; todo Form for creating new bookmarks
-    ;; List of present bookmarks
-    (:br)
-    ;; todo display list of categories for quick filtering
-    (:div :id (cc bookmarks-list)
-            (mapc #'single-bookmark (bm:all-bookmarks)))
-    ))
+  (let ((category (bm:category-p category)))
+    (bookmark/document (:title "All bookmarks as list")
+      ;; todo Form for creating new bookmarks
+      ;; List of present bookmarks
+      (category-filters (bm:all-known-categories) category)
+      (:div :id (cc bookmarks-list)
+            (mapc #'single-bookmark (aif category
+                                         (bm:bookmarks-in-category it)
+                                         (bm:all-bookmarks))))
+      )))
 
-(define-easy-handler (bookmarks-tree :uri "/bookmarks/tree") ()
-  (bookmark/document (:title "All bookmarks as tree")
-    ;; todo Form for creating new bookmarks
-    ;; List of present bookmarks
-    (:br)
-    (:div :id (cc bookmarks-tree)
+(define-easy-handler (bookmarks-tree :uri "/bookmarks/tree") (category)
+  (let ((category (bm:category-p category)))
+    (bookmark/document (:title "All bookmarks as tree")
+      ;; todo Form for creating new bookmarks
+      ;; List of present bookmarks
+      (category-filters (bm:all-known-categories) category)
+      (:div :id (cc bookmarks-tree)
             (labels ((render-bm-tree (tree)
                        (cond ((null tree))
                              ((atom tree)
@@ -72,8 +74,21 @@
                                               (render-bm-tree (cdr tree)))))
                              (t (render-bm-tree (car tree))
                                 (render-bm-tree (cdr tree))))))
-              (render-bm-tree (bm-tree:build-tree (bm:all-bookmarks)))))
-    ))
+              (render-bm-tree (aif category
+                                   (bm-tree:build-tree 
+                                    (bm:bookmarks-in-category it) (list it))
+                                   (bm-tree:build-tree (bm:all-bookmarks))))))
+      )))
+
+(defun category-filters (categories &optional active)
+  (html/node
+    (:div :class "categories filters"
+          (dolist (c categories)
+            (htm (:a :href (conc "?category=" (symbol-name c))
+                     :class (if (eq c active) "selected-category" "")
+                     (str c))
+                 (str " ")))))
+  )
 
 
 (defun single-bookmark (bm)
@@ -96,7 +111,7 @@
       (let* ((node ($ node))
              (parents (@@ node (parents-until ".bookmark"))))
         (if (< 0 (@ parents.length))
-            (@@ parent (last) (parent))
+            (@@ parents (last) (parent))
             (@@ node (parent)))))
 
     (defun bookmark-title (bm)
@@ -114,6 +129,7 @@
 
     (defun category-click ()
       (@@ event (prevent-default))
+      (user-message (current-bookmark ($ this)))
       (user-message (@@ ($ this) (text))))
 
     (defun add-category-ui (bm category)
@@ -127,7 +143,7 @@
           (add-category-ui bm "super")
           ))
 
-      (@@ ($ "a.category") (click category-click))
+      (@@ ($ ".bookmark a.category") (click category-click))
       (values))))
 
 (define-easy-handler (bookmarks-css :uri "/bookmarks/style.css") ()
@@ -141,15 +157,20 @@
                   :text-align "right"
                   :color "gray"))
     ((".selected") (:background-color "yellow"))
+    ((".selected-category") (:background-color "lightgreen"))
     (("#messageContainer") (
                             :position "absolute"
                             :top "20px"
                             :right "20px"
                             :width "30%"
                             :background "khaki"))
-    (("span.categories") (
-                          :margin-left "2ex"
-                                       :font-size "80%")
+    ((".filters") (
+                   :margin "1ex"
+                   :padding "3pt"
+                   :border "solid gray 1px"))
+    (("span.categories") (:margin-left "2ex"))
+    ((".categories") (
+                      :font-size "80%")
      ;; todo macro for generating link styling
      (("a:link") (
                   :color "orange"

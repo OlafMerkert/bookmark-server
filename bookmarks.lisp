@@ -16,7 +16,9 @@
    #:title
    #:url
    #:categories
-   #:user-categories))
+   #:user-categories
+   #:category-p
+   #:all-known-categories))
 
 (defpackage :bookmark-categories
   (:nicknames :cat))
@@ -61,7 +63,7 @@
          x)
         ((and (consp x) (stringp (cdr x)))
          (recons (car x) (cat (cdr x)) x))
-        ((symbolp x) (cons (symbol-value x) x))
+        ((symbolp x) (cons (symbol-name x) x))
         ((stringp x) (cons x (cat x)))
         (t (error "invalid title->category spec ~A" x))))
 
@@ -339,10 +341,12 @@
   (let (categories)
     (do-symbols (s :bookmark-categories)
       (push s categories))
-    categories))
+    (sort categories #'string<= :key #'symbol-name)))
 
-;; todo keep track of all used categories (want this for
-;; autocompletion and stuff)
+(defun category-p (cat)
+  (or (and (symbolp cat) cat)
+      (and (stringp cat)
+           (find-symbol cat :bookmark-categories))))
 
 
 ;; saving/loading bookmarks from custom JSON
@@ -358,7 +362,7 @@
              (cl-json:encode-object-member 'url (url bm) stream)
              (cl-json:encode-object-member 'title (title bm) stream)
              (cl-json:encode-object-member 'categories
-                                           (mapcar #'symbol-value (user-categories bm))
+                                           (mapcar #'symbol-name (user-categories bm))
                                            stream))))))))
 
 (defun load-bookmarks (pathname)

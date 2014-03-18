@@ -51,19 +51,8 @@
     ;; List of present bookmarks
     (:br)
     ;; todo display list of categories for quick filtering
-    (:table :id (cc bookmarks-table)
-            (dolist (bm (bm:all-bookmarks))
-              (htm
-               (:tr :class "bookmark"
-                    (:td :class "bookmark-link" 
-                         (:a :target "_blank" :href (bm:url bm)
-                             (esc (bm:title bm))))
-                    (:td :class "categories"
-                         (dolist (c (bm:categories bm))
-                           (str c)
-                           (str " ")))
-                    #|(:td :class "url"
-                         (:span :class ".hidden"(esc (bm:url bm))))|#))))
+    (:div :id (cc bookmarks-list)
+            (mapc #'single-bookmark (bm:all-bookmarks)))
     ))
 
 (define-easy-handler (bookmarks-tree :uri "/bookmarks/tree") ()
@@ -71,18 +60,11 @@
     ;; todo Form for creating new bookmarks
     ;; List of present bookmarks
     (:br)
-    (:table :id (cc bookmarks-table)
+    (:div :id (cc bookmarks-tree)
             (labels ((render-bm-tree (tree)
                        (cond ((null tree))
                              ((atom tree)
-                              (htm (:div :class "bookmark"
-                                         (:a :target "_blank" :href (bm:url tree)
-                                             (esc (bm:title tree)))
-                                         (str " ")
-                                         (:span :class "categories"
-                                                (dolist (c (bm:categories tree))
-                                                  (str c)
-                                                  (str " ")) ))))
+                              (single-bookmark tree))
                              ((symbolp (car tree))
                               (htm (:fieldset :class "category"
                                               (:legend :class "categories"
@@ -93,17 +75,59 @@
               (render-bm-tree (bm-tree:build-tree (bm:all-bookmarks)))))
     ))
 
+
+(defun single-bookmark (bm)
+  (html/node (:div :class "bookmark"
+                   (:a :class "bookmark-link" :target "_blank" :href (bm:url bm)
+                       (esc (bm:title bm)))
+                   (str " ")
+                   (:span :class "categories"
+                          (dolist (c (bm:categories bm))
+                            (htm (:a :class "category" :href "#"
+                                     (str c))
+                                 (str " "))) )
+                   (str "&nbsp;")
+                   (:button :class "add-tag" "+"))))
+
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
+    (defun current-bookmark (node)
+      (let* ((node ($ node))
+             (parents (@@ node (parents-until ".bookmark"))))
+        (if (< 0 (@ parents.length))
+            (@@ parent (last) (parent))
+            (@@ node (parent)))))
+
+    (defun bookmark-title (bm)
+      (@@ bm (children "a.bookmark-link") (text)))
+
+    (defun bookmark-url (bm)
+      (@@ bm (children "a.bookmark-link") (attr "href")))
+
+    (defun bookmark-categories-dom (bm)
+      (@@ bm (children ".categories") (children)))
+
+    (defun bookmark-categories (bm)
+      (@@ $ (map (bookmark-categories-dom bm)
+                 (lambda (c) (@@ ($ c) (text))))))
+
+    (defun category-click ()
+      (@@ event (prevent-default))
+      (user-message (@@ ($ this) (text))))
+
+    (defun add-category-ui (bm category)
+      (let ((cat-el ($ (who-ps-html (:a :class "category" :href "#" category)))))
+        (@@ cat-el (click category-click))
+        (@@ bm (children ".categories") (append " ") (append cat-el))))
+
     (bind-event document ready ()
-      (@@ ($ ".hidden" ) (hide) (css "visibility" "visible"))
-      
-      ;; hiding/unhiding url of bookmark
-      (bind-event ".bookmark" mouseover ()
-        (@@ ($ this) (find ".hidden") (show)))
-      (bind-event ".bookmark" mouseout ()
-        (@@ ($ this) (find ".hidden") (hide)))
+      (bind-event "button.add-tag" click ()
+        (let ((bm (current-bookmark this)))
+          (add-category-ui bm "super")
+          ))
+
+      (@@ ($ "a.category") (click category-click))
       (values))))
 
 (define-easy-handler (bookmarks-css :uri "/bookmarks/style.css") ()
@@ -123,17 +147,36 @@
                             :right "20px"
                             :width "30%"
                             :background "khaki"))
-    ((".categories") (
-                      :font-size "80%"
-                      :color "orange"))
+    (("span.categories") (
+                          :margin-left "2ex"
+                                       :font-size "80%")
+     ;; todo macro for generating link styling
+     (("a:link") (
+                  :color "orange"
+                  :text-decoration "none"))
+     (("a:visited") (
+                     :color "orange"
+                     :text-decoration "none"))
+     (("a:focus") (
+                   :color "orange"
+                   :text-decoration "none"))
+     (("a:hover") (
+                   :color "orange"
+                   :text-decoration "none"))
+     (("a:active") (
+                    :color "orange"
+                    :text-decoration "none")))
+    (("a.category") (
+                
+                 
+                     ))
     (("legend.categories") (
                             :font-size "90%"
                             :color "darkred"))
     (("table") (:border-collapse "collapse"))
-    (("td") (
-             :border "solid 1px lightgray"
-             :padding "2px"))
-    ((".bookmark") ()
+    ((".bookmark")  (
+                     ;; :border "solid 1px lightgray"
+                     :padding "2px")
      (("a:link") (
                   :color "blue"
                   :text-decoration "none"))
@@ -148,4 +191,6 @@
                    :text-decoration "underline"))
      (("a:active") (
                     :color "red"
-                    :text-decoration "underline"))) ))
+                    :text-decoration "underline"))
+     (("button.add-tag") (
+                          :font-size "70%;"))) ))

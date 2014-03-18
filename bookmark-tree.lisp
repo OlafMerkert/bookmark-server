@@ -55,5 +55,4 @@
         (cons (cons cat1 (build-tree cat1bms bl1))
               (build-tree-part cls1 bl1))))))
 
-
-
+;; todo add mechanisms to allow prioritisation of categories

@@ -66,6 +66,7 @@
         (t (error "invalid title->category spec ~A" x))))
 
 
+;; todo use regexp for more flexibility
 (defpar title->category
     (mapcar #'mkcat
             '("ARMA"
@@ -131,7 +132,6 @@
               ("model" . "modell")
               "buch"
               "fahrrad"
-              ("rad" . "fahrrad")
               ("bike" . "fahrrad")
               "git"
               "blender"

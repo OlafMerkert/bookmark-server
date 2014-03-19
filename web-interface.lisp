@@ -31,8 +31,8 @@
          ;; nothing supplied, just get rid of the input 
          (remove-category-form bm))
         (t (ajax-call
-            (:server (:url (bookmark-url bm) :categories categories)
-                     (bm:add-categories url categories))
+            (:server (:url (bookmark-url bm) :categories (@@ categories (join ",")))
+                     (bm:add-categories url (split-sequence:split-sequence #\, categories)))
             (:client () ()
                      (add-categories-ui bm categories)
                      (remove-category-form bm))

@@ -96,11 +96,9 @@
   c)
 
 (defun cat (category)
-  (cond ((length=0 category)
-         (error 'invalid-category-identifier :category category))
-        ((symbolp category)
+  (cond ((symbolp category)
          category)
-        ((stringp category)
+        ((and (stringp category) (not (length=0 category)))
          (intern category :cat))
         (t (error 'invalid-category-identifier :category category))))
 
@@ -355,7 +353,7 @@
 (defmethod add-categories ((bm bookmark) categories)
   (let ((categories (mapcar #'cat categories)))
     (setf (user-categories bm)
-          (union categories (user-categories bm)))))
+          (union categories (user-categories bm) :test 'eq))))
 
 (defmethod remove-category ((bm string) category)
   (remove-category (get-bookmark bm) category))

@@ -18,7 +18,14 @@
    #:categories
    #:user-categories
    #:category-p
-   #:all-known-categories))
+   #:all-known-categories
+   #:add-category
+   #:category-error
+   #:user-category-present
+   #:user-category-not-present
+   #:bookmark-error
+   #:bookmark-not-exists
+   #:remove-category))
 
 (defpackage :bookmark-categories
   (:nicknames :cat))
@@ -32,20 +39,51 @@
 (defclass bookmark ()
   ((title :initarg :title
           :initform ""
-          :accessor title)
+          :reader title)
    (url :initarg :url
         :initform "http://"
-        :accessor url)
+        :reader url)
    (user-categories :initarg :user-categories
                     :initform nil
-                    :accessor user-categories)
-   title-categories
-   url-categories
-   auto-categories
+                    :reader user-categories)
+   (title-categories :reader title-categories)
+   (url-categories :reader url-categories)
+   (auto-categories :reader auto-categories)
    (categories :reader categories)))
 
 (create-standard-print-object bookmark title url (user-categories))
 
+;;; conditions
+(define-condition split-sequence-overflow ()
+  ((sequence :initarg :sequence)
+   (separator :initarg :separator)
+   (index :initarg :index)))
+
+(define-condition bookmark-error ()
+  ((bookmark :initarg :bookmark
+             :reader bookmark)))
+
+(define-condition bookmark-exists (bookmark-error)
+  ())
+
+(define-condition bookmark-not-exists (bookmark-error)
+  ())
+
+(define-condition category-error ()
+  ((category :initarg :category
+             :reader category)))
+
+(define-condition user-category-present (category-error)
+  ())
+
+(define-condition user-category-not-present (category-error)
+  ())
+
+(define-condition cannot-remove-auto-category (category-error)
+  ())
+
+
+;;; 
 (defun recons (a d c)
   (setf (car c) a
         (cdr c) d)
@@ -67,6 +105,14 @@
         ((stringp x) (cons x (cat x)))
         (t (error "invalid title->category spec ~A" x))))
 
+(defmacro! create-category-logic (formula category)
+  ;; formulas can contain `and', `or' and `not'
+  (let ((variables (remove* '(and or not) (flatten formula) :test #'eq)))
+    `(lambda (,g!table)
+       (let ,(mapcar #`(,a1 (gethash ',a1 ,g!table)) variables)
+         (when ,formula
+           ',(cat category))))))
+;; todo do we allow creation of rules at runtime? that might require a
 
 ;; todo use regexp for more flexibility
 (defpar title->category
@@ -196,8 +242,6 @@
                        (split-sequence-element url #\/ 2))
     (split-sequence-overflow () nil)))
 
-(define-condition split-sequence-overflow ()
-  (sequence separator index))
 
 (defun split-sequence-element (sequence separator index &key test)
   (labels ((next-position (start)
@@ -252,24 +296,16 @@
         (mapc #'apply-logic category-logic))
       auto-cats)))
 
-(defun remove* (list sequence &key test)
-  (if (null list)
-      sequence
-      (remove* (cdr list) (remove (car list) sequence :test test) :test test)))
 
 
-(defmacro! create-category-logic (formula category)
-  ;; formulas can contain `and', `or' and `not'
-  (let ((variables (remove* '(and or not) (flatten formula) :test #'eq)))
-    `(lambda (,g!table)
-       (let ,(mapcar #`(,a1 (gethash ',a1 ,g!table)) variables)
-         (when ,formula
-           ',(cat category))))))
-;; todo do we allow creation of rules at runtime? that might require a
+
+
 ;; different approach
 
 (defun get-bookmark (url)
-  (item-at bookmarks url))
+  (mvbind (bm present) (item-at bookmarks url)
+    (if present bm
+        (error 'bookmark-not-exists :bookmark url))))
 
 (defgeneric edit-bookmark (bookmark prop new-value))
 ;; todo perhaps better to use generalised variables??
@@ -286,7 +322,7 @@
   (update-categories 'auto-categories bm)
   (update-categories 'categories bm))
 
-(defmethod edit-bookmark ((bm bookmark) (prop (eql 'url+title)) (new-value cons))
+(defmethod edit-bookmark ((bm bookmark) (prop (eql 'url+title)) (new-value list))
   (setf (slot-value bm 'url) (car new-value)
         (slot-value bm 'title) (cdr new-value))
   (update-all-categories bm))
@@ -296,13 +332,35 @@
   (update-categories 'auto-categories bm)
   (update-categories 'categories bm))
 
-
-(define-condition bookmark-exists ()
-  ((bookmark :initarg :bookmark
-             :reader bookmark)))
+(bind-multi ((prop url title user-categories))
+  (defsetf prop (bm) (new-value) `(edit-bookmark ,bm 'prop ,new-value)))
 
 (defmethod edit-bookmark ((bm string) prop new-value)
   (edit-bookmark (get-bookmark bm) prop new-value))
+
+(defmethod add-category ((bm string) category)
+  (add-category (get-bookmark bm) category))
+
+(defmethod add-category ((bm bookmark) category)
+  (let ((category (cat category)))
+    (if (member category (user-categories bm))
+        (error 'user-category-present :category category)
+        (push category (user-categories bm)))))
+
+(defmethod remove-category ((bm string) category)
+  (remove-category (get-bookmark bm) category))
+
+(defmethod remove-category ((bm bookmark) category)
+  (let ((category (cat category))
+        (uc (user-categories bm)))
+    (cond ((member category uc)
+           (setf (user-categories bm)
+                 (remove category uc)))
+          ((or (member category (title-categories bm))
+               (member category (url-categories bm))
+               (member category (auto-categories bm)))
+           (error 'cannot-remove-auto-category :category category))
+          (t (error 'user-category-not-present)))))
 
 
 (defun add-bookmark (url &optional (title "") categories)

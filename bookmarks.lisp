@@ -236,7 +236,13 @@
 
 (defpar category-logic
     (list (create-category-logic cat::|cliki| cat::|lisp|)
-          (create-category-logic cat::|clim| cat::|lisp|)))
+          (create-category-logic cat::|clim| cat::|lisp|)
+          (create-category-logic cat::|Klassik| cat::|Musik|)
+          (create-category-logic cat::|Schlager| cat::|Musik|)
+          (create-category-logic cat::|Pop| cat::|Musik|)
+          (create-category-logic cat::|Rowan Atkinson| cat::|funny|)
+          ;; note if there is a not criterion, it should come last
+          (create-category-logic (and cat::|youtube| (not cat::|Musik|)) cat::|video|)))
 
 (defmethod match ((variant (eql 'title-categories)) t->c title)
   (if (search (car t->c) title :test #'char-equal)
@@ -299,7 +305,8 @@
       ;; fixpoint iteration on the logic
       (do () ((not create-flag))
         (setf create-flag nil)
-        (mapc #'apply-logic category-logic))
+        ;; only go to the first match.
+        (some #'apply-logic category-logic))
       auto-cats)))
 
 

@@ -218,9 +218,12 @@
     (defun add-category-ui (bm category)
       (let ((cat-el ($ (who-ps-html (:a :class "category" :href "#" category)))))
         (@@ cat-el (click category-click))
-        (@@ bm (children ".categories") (append " ") (append cat-el))
-        ;; todo add to filter list??
-        ))
+        (@@ bm (children ".categories") (append " ") (append cat-el)))
+      ;; add to filter list
+      (if (not (member category (all-categories)))
+          (let ((cat-el ($ (who-ps-html (:a :href (concatenate 'string "?category=" category) category)))))
+            (@@ ($ "div.filters") (append " ") (append cat-el))))
+      )
 
     (defun add-categories-ui (bm categories)
       (dolist (cat categories)

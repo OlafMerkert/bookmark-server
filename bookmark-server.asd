@@ -14,5 +14,5 @@
                (:file "chrome-import")
                (:file "bookmark-tree")
                (:file "ajax-actions")
-               ;; (:file "web-interface")
+               (:file "web-interface")
                ))

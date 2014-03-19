@@ -24,10 +24,55 @@
 
 (ew (defpar bm-root '(bookmarks)))
 
+(define-ajax-action+ (bookmark categories add) (bm categories)
+  ;; `bm' should be a DOM node, `categories' a list of strings
+  ;; first check if the categories is already added
+  (cond ((length=0 categories)
+         ;; nothing supplied, just get rid of the input 
+         (remove-category-form bm))
+        (t (ajax-call
+            (:server (:url (bookmark-url bm) :categories categories)
+                     (bm:add-categories url categories))
+            (:client () ()
+                     (add-categories-ui bm categories)
+                     (remove-category-form bm))
+            ;; exception handling
+            (bm:bookmark-not-exists
+             () ()
+             (user-message "Bookmark was deleted."))
+            ))))
+
+(define-ajax-action+ (bookmark category remove) (bm category)
+  ;; `bm' and `category' should be DOM nodes
+  (let ((cat (@@ ($ category) (text))))
+    (if (not (member cat (bookmark-categories bm)))
+        (user-message #1="Category not assigned")
+        (ajax-call
+         (:server (:url (bookmark-url bm) :category cat)
+                  (bm:remove-category url category))
+         (:client () ()
+                  (@@ ($ category) (remove)))
+         ;; exception handling
+         (bm:bookmark-not-exists
+          () ()
+          (user-message "Bookmark was deleted."))
+         (bm:user-category-not-present
+          () ()
+          (user-message #1#))
+         (bm:cannot-remove-auto-category
+          () ()
+          (user-message "Cannot remove automatically assigned category.")))))
+  )
+
 (define-easy-handler (bookmarks-start :uri "/bookmarks") ()
   (html/document (:title #1="Bookmark Server")
     (:h1 #1#)
     (:p "View the " (:a :href (breadcrumb->url '(bookmarks list)) "list") " of bookmarks.")))
+
+(setup-static-content "/scripts/jquery-ui-1.10.4.custom.min.css"
+                      #P"/home/olaf/Projekte/bookmark-server/jquery-ui-1.10.4.custom.min.css"
+                      "/scripts/jquery-ui-1.10.4.custom.min.js"
+                      #P"/home/olaf/Projekte/bookmark-server/jquery-ui-1.10.4.custom.min.js")
 
 (defmacro bookmark/document ((&key title) &body body)
   `(html/document (:title ,title
@@ -36,6 +81,8 @@
                           :script "/scripts/jquery-1.10.2.min.js"
                           :script "/scripts/sticky/sticky.js"
                           :style "/scripts/sticky/sticky.css"
+                          :script "/scripts/jquery-ui-1.10.4.custom.min.js"
+                          :style "/scripts/jquery-ui-1.10.4.custom.min.css"
                           :script "/scripts/utils.js"
                           :script "/bookmarks/ajax/actions.js"
                           :script "/bookmarks/logic.js"
@@ -110,6 +157,37 @@
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
   (ps
+    ;; autocompletion code
+    (defun split (val)
+      (@@ val (split (regex ",\\s*"))))
+    (defun extract-last (term)
+      (@@ (split term) (pop)))
+
+    (defun provide-autocomplete (input completions)
+      (@@ input
+          ;; disable TAB key
+          (bind "keydown"
+                (lambda (e)
+                  (if (and (= (@ e key-code) (@ $ ui key-code |TAB|))
+                           (@@ ($ this) (data "ui-autocomplete") menu active))
+                      (@@ e (prevent-default)))))
+          (autocomplete
+           (create min-length 0
+                   source (lambda (request response)
+                            (response (@@ $ ui autocomplete (filter completions
+                                                                    (extract-last (@ request term))))))
+                   focus (lambda () f)
+                   select (lambda (event ui)
+                            (let ((terms (split (@ this value))))
+                              (@@ terms (pop))
+                              (@@ terms (push (@ ui item value)))
+                              (@@ terms (push ""))
+                              (setf (@ this value) (@@ terms (join ", ")))
+                              f))))))
+
+
+
+    ;; bookmark specific code
     (defun current-bookmark (node)
       (let* ((node ($ node))
              (parents (@@ node (parents-until ".bookmark"))))
@@ -128,12 +206,14 @@
 
     (defun bookmark-categories (bm)
       (@@ $ (map (bookmark-categories-dom bm)
-                 (lambda (c) (@@ ($ c) (text))))))
+                 get-text)))
 
     (defun category-click ()
       (@@ event (prevent-default))
-      (user-message (current-bookmark ($ this)))
-      (user-message (@@ ($ this) (text))))
+      (let* ((category ($ this))
+             (cat (@@ category (text))))
+        (if (confirm (concatenate 'string "Remove category " cat "?"))
+            (bookmark-category-remove (current-bookmark category) category))))
 
     (defun add-category-ui (bm category)
       (let ((cat-el ($ (who-ps-html (:a :class "category" :href "#" category)))))
@@ -142,13 +222,57 @@
         ;; todo add to filter list??
         ))
 
+    (defun add-categories-ui (bm categories)
+      (dolist (cat categories)
+        (add-category-ui bm cat)))
+
+    (defun all-categories ()
+      (@@ $ (map ($ ".filters a")
+                 get-text)))
+
+    (defun category-form (bm)
+      (@@ bm (find "input.category-input")))
+
+    (defun has-category-form (bm)
+      (< (length (category-form bm))))
+
+    (defun remove-category-form (bm)
+      (hide+remove (category-form bm) ))
+
+    (defun new-category-form (button bm)
+      (let ((input ($ (who-ps-html (:input :type "text" :size "30" :class "category-input")))))
+        ;; todo enable autocompletion
+        (provide-autocomplete input (all-categories))
+        ;; hide and attach
+        (@@ input (hide)
+                  (insert-after button)
+                  (show "normal"))
+        ;; allow using ENTER to complete
+        (@@ input (bind "keydown"
+                        (lambda (e)
+                          (when (= (@ e key-code) (@ $ ui key-code |ENTER|))
+                            (@@ e (prevent-default))
+                            (user-message "enter") ; todo get this to work
+                            (process-category-form (current-bookmark this))))))
+        ;; move the focus to the field
+        (@@ input (focus))
+        ))
+
+    (defun process-category-form (bm)
+      (let* ((input (category-form bm))
+             (categories (remove-empty (split (@@ input (val))))))
+        (bookmark-categories-add bm categories)))
+
+
     (bind-event document ready ()
       (bind-event "button.add-tag" click ()
         (let ((bm (current-bookmark this)))
-          (add-category-ui bm "super")
-          ))
+          (if (has-category-form bm)
+              (process-category-form bm)
+              (new-category-form ($ this) bm))))
 
       (@@ ($ ".bookmark a.category") (click category-click))
+
       (values))))
 
 (define-easy-handler (bookmarks-css :uri "/bookmarks/style.css") ()
@@ -175,7 +299,7 @@
                    :border "solid gray 1px"))
     (("span.categories") (:margin-left "2ex"))
     (("span.categories") (
-                      :font-size "80%")
+                          :font-size "80%")
      ;; todo macro for generating link styling
      (("a:link") (
                   :color "orange"
@@ -191,9 +315,9 @@
                    :text-decoration "none"))
      (("a:active") (
                     :color "orange"
-                           :text-decoration "none")))
+                    :text-decoration "none")))
     (("div.categories") (
-                      :font-size "80%")
+                         :font-size "80%")
      ;; todo macro for generating link styling
      (("a:link") (
                   :color "orange"
@@ -233,4 +357,12 @@
                     :color "red"
                     :text-decoration "underline"))
      (("button.add-tag") (
-                          :font-size "70%;"))) ))
+                          :font-size "70%;")))
+    ((".ui-autocomplete") (
+                           :background-color "#f0f0f0"
+                           :font-size "90%"
+                           :color "darkred"
+                           :border "solid 1px lightgray"))
+    ((".ui-state-focus") (
+                          :color "red"
+                          :background-color "#e0e0e0"))))

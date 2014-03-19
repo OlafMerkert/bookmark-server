@@ -25,7 +25,10 @@
    #:user-category-not-present
    #:bookmark-error
    #:bookmark-not-exists
-   #:remove-category))
+   #:remove-category
+   #:get-bookmark%
+   #:cannot-remove-auto-category
+   #:add-categories))
 
 (defpackage :bookmark-categories
   (:nicknames :cat))
@@ -82,6 +85,9 @@
 (define-condition cannot-remove-auto-category (category-error)
   ())
 
+(define-condition invalid-category-identifier ()
+  ((category :initarg :category
+             :reader category)))
 
 ;;; 
 (defun recons (a d c)
@@ -90,11 +96,13 @@
   c)
 
 (defun cat (category)
-  (cond ((symbolp category)
+  (cond ((length=0 category)
+         (error 'invalid-category-identifier :category category))
+        ((symbolp category)
          category)
         ((stringp category)
          (intern category :cat))
-        (t (error "Unknown category identifier ~A" category))))
+        (t (error 'invalid-category-identifier :category category))))
 
 (defun mkcat (x)
   (cond ((and (consp x) (symbolp (cdr x)))
@@ -307,6 +315,9 @@
     (if present bm
         (error 'bookmark-not-exists :bookmark url))))
 
+(defun get-bookmark% (url)
+  (item-at bookmarks url))
+
 (defgeneric edit-bookmark (bookmark prop new-value))
 ;; todo perhaps better to use generalised variables??
 
@@ -338,14 +349,13 @@
 (defmethod edit-bookmark ((bm string) prop new-value)
   (edit-bookmark (get-bookmark bm) prop new-value))
 
-(defmethod add-category ((bm string) category)
-  (add-category (get-bookmark bm) category))
+(defmethod add-categories ((bm string) categories)
+  (add-categories (get-bookmark bm) categories))
 
-(defmethod add-category ((bm bookmark) category)
-  (let ((category (cat category)))
-    (if (member category (user-categories bm))
-        (error 'user-category-present :category category)
-        (push category (user-categories bm)))))
+(defmethod add-categories ((bm bookmark) categories)
+  (let ((categories (mapcar #'cat categories)))
+    (setf (user-categories bm)
+          (union categories (user-categories bm)))))
 
 (defmethod remove-category ((bm string) category)
   (remove-category (get-bookmark bm) category))
@@ -364,7 +374,7 @@
 
 
 (defun add-bookmark (url &optional (title "") categories)
-  (aif (get-bookmark url)
+  (aif (get-bookmark% url)
        (error 'bookmark-exists :bookmark it))
   ;; todo error recovery strategy?
   (let ((bm (make-instance 'bookmark :url url :title title :user-categories categories)))

@@ -11,6 +11,7 @@
                cl-containers)
   :serial t
   :components ((:file "bookmarks")
+               (:file "bookmark-rules")
                (:file "chrome-import")
                (:file "bookmark-tree")
                (:file "ajax-actions")

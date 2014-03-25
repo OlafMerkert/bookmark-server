@@ -6,7 +6,10 @@
   (:use :cl :ol :iterate :cl-containers
         :bookmarks)
   (:export
-   #:build-tree))
+   #:build-tree
+   #:category
+   #:walk-bm-tree
+   #:walk-on))
 
 (in-package :bookmark-tree)
 
@@ -58,7 +61,7 @@ sequence, break ties by sorting alphabetically."
 
 (defun build-tree (bookmark-list &optional blacklist)
   (let* ((cls1 (classify bookmark-list blacklist))
-         (tree (build-tree-part cls1 blacklist))
+         (tree (build-tree-part cls1 blacklist (size bookmark-list)))
          (empty (sort-bookmarks (gethash :empty cls1))))
     (if (length=0 empty)
         tree
@@ -67,7 +70,7 @@ sequence, break ties by sorting alphabetically."
 (defpar refinement-limit 2)
 
 
-(defun build-tree-part (cls1 blacklist)
+(defun build-tree-part (cls1 blacklist &optional (nr-of-bookmarks -2))
   ;; choose the category with the most entries
   (mvbind (cat1 size1) (largest-key cls1)
     (when cat1
@@ -81,15 +84,41 @@ sequence, break ties by sorting alphabetically."
                                (setf (gethash k cls1) it)
                                (remhash  k cls1)))
                  cls1)
-        ;; if this category is small, don't group further
-        (cons (if (<= size1 refinement-limit)
-                  (append1 (sort-bookmarks cat1-bookmarks)
-                           (build-tree-part cls1 blacklist-1))
-                  (cons cat1 (build-tree cat1-bookmarks blacklist-1)))
+        (cons (cond
+                ;; if this category is small, don't group further
+                ((<= size1 refinement-limit)
+                 (append1 (sort-bookmarks cat1-bookmarks)
+                          (build-tree-part cls1 blacklist-1)))
+                ;; if this category contains all bookmarks considered,
+                ;; don't use grouping
+                ((= nr-of-bookmarks size1)
+                 (build-tree cat1-bookmarks blacklist-1))
+                (t (cons cat1 (build-tree cat1-bookmarks blacklist-1))))
               (build-tree-part cls1 blacklist-1))))))
 
 ;; todo add mechanisms to allow prioritisation of categories
 
 
-;;; todo iteration on trees
+;;; iteration on trees
+(defun walk-bm-tree% (tree category-fun bookmark-fun)
+  (labels ((recurse (tree)
+             (cond ((null tree))
+                   ((atom tree)
+                    (funcall bookmark-fun tree))
+                   ((and (symbolp (car tree))
+                         (category-p (car tree)))
+                    (funcall category-fun (car tree)
+                             (lambda () (recurse (cdr tree)))))
+                   (t (recurse (car tree))
+                      (recurse (cdr tree))))))
+    (recurse tree)))
+
+(defmacro! walk-bm-tree (tree category-expr bookmark-expr)
+  `(walk-bm-tree% ,tree
+                  (lambda (bm:category ,g!continue)
+                    (macrolet ((walk-on () `(funcall ,',g!continue)))
+                      ,category-expr))
+                  (lambda (bm:bookmark)
+                    ,bookmark-expr)))
+
 

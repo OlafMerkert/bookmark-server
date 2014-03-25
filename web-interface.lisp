@@ -132,30 +132,15 @@
           (:a :href "/bookmarks/list0" "List View (uncategorised only)"))
       (category-filters (bm:all-known-categories) category)
       (:div :id (cc bookmarks-tree)
-            (labels ((render-bm-tree (tree &optional collapsed)
-                       (cond ((null tree))
-                             ((atom tree)
-                              (single-bookmark tree))
-                             ;; no explicit grouping for categories
-                             ;; with just one or two children
-                             ((and (symbolp (car tree))
-                                   (<= (length (cdr tree)) 1)
-                                   (symbolp (cadr tree)))
-                              (render-bm-tree (cdr tree)
-                                              (cons (car tree) collapsed)))
-                             ((symbolp (car tree))
-                              (htm (:fieldset :class "category"
-                                              (:legend :class "categories"
-                                                       (dolist (c (reverse collapsed))
-                                                         (str c) (str " "))
-                                                       (str (car tree)))
-                                              (render-bm-tree (cdr tree)))))
-                             (t (render-bm-tree (car tree))
-                                (render-bm-tree (cdr tree))))))
-              (render-bm-tree (aif category
-                                   (bm-tree:build-tree 
-                                    (bm:bookmarks-in-category it) (list it))
-                                   (bm-tree:build-tree (bm:all-bookmarks))))))
+            (bm-tree:walk-bm-tree
+             (aif category
+                  (bm-tree:build-tree 
+                   (bm:bookmarks-in-category it) (list it))
+                  (bm-tree:build-tree (bm:all-bookmarks)))
+             (htm (:fieldset :class "category"
+                             (:legend :class "categories" (str bm:category))
+                             (bm-tree:walk-on))) 
+             (single-bookmark bm:bookmark)))
       )))
 
 (defun category-filters (categories &optional active)
@@ -351,23 +336,35 @@
                     :color "orange"
                     :text-decoration "none")))
     (("div.categories") (
-                         :font-size "80%")
+                         :font-size "80%"
+                         :font-family "sans-serif"
+                         :line-height "160%")
      ;; todo macro for generating link styling
      (("a:link") (
                   :color "orange"
-                  :text-decoration "none"))
+                  :text-decoration "none"
+                  :padding "1px"
+                  :border "solid 1px gray"))
      (("a:visited") (
                      :color "orange"
-                     :text-decoration "none"))
+                     :text-decoration "none"
+                     :padding "1px"
+                     :border "solid 1px gray"))
      (("a:focus") (
                    :color "orange"
-                   :text-decoration "none"))
+                   :text-decoration "none"
+                   :padding "1px"
+                   :border "solid 1px black"))
      (("a:hover") (
                    :color "orange"
-                   :text-decoration "none"))
+                   :text-decoration "none"
+                   :padding "1px"
+                   :border "solid 1px black"))
      (("a:active") (
                     :color "orange"
-                    :text-decoration "none")))
+                    :text-decoration "none"
+                    :padding "1px"
+                    :border "solid 1px black")))
     (("legend.categories") (
                             :font-size "90%"
                             :color "darkred"))

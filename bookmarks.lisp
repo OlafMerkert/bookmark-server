@@ -30,7 +30,8 @@
    #:cannot-remove-auto-category
    #:add-categories
    #:cat-rule
-   #:bookmarks-without-category))
+   #:bookmarks-without-category
+   #:category))
 
 (defpackage :bookmark-categories
   (:nicknames :cat))

@@ -11,6 +11,10 @@
               "Blackshark"
               ("black shark" . "Blackshark")
               ("Ka-50" . "Blackshark")
+              "Huey"
+              ("UH-1" . "Huey")
+              "Mustang"
+              ("P-51" . "Mustang")
               "FSX"
               "test"
               ("review" . "test")
@@ -80,13 +84,23 @@
               "linux"
               "gentoo"
               "ubuntu"
+              "gnome"
               "program"
               "thinkpad"
-              "Mathematica"
               "javascript"
               ("jquery" . "javascript")
               "documentation"
               ("docs" . "documentation")
+              "tutorial"
+              "gimp"
+              "inkscape"
+              ("latex" . "TeX")
+              ("texlive" . "TeX")
+              "sketch"
+              ("sql" . "database")
+              ("plot" . "plotting")
+              "radio"
+              "Schlusslicht"
               )))
 
 (defpar url->category
@@ -121,13 +135,20 @@
               "twitter"
               )))
 
+(defalias => create-category-logic)
+
 (defpar category-logic
-    (list (create-category-logic cat::|cliki| cat::|lisp|)
-          (create-category-logic cat::|clim| cat::|lisp|)
-          (create-category-logic cat::|Klassik| cat::|Musik|)
-          (create-category-logic cat::|Schlager| cat::|Musik|)
-          (create-category-logic cat::|Pop| cat::|Musik|)
-          (create-category-logic cat::|Rowan Atkinson| cat::|funny|)
-          (create-category-logic cat::|ImDB| cat::|Film|)
-          ;; note if there is a not criterion, it should come last
-          (create-category-logic (and cat::|youtube| (not cat::|Musik|)) cat::|video|)))
+    (list (=> (or cat::|cliki| cat::|clim|) cat::|lisp|)
+          (=> (or cat::|Klassik| cat::|Schlager| cat::|Pop|) cat::|Musik|)
+          (=> cat::|Rowan Atkinson| cat::|funny|)
+          (=> cat::|ImDB| cat::|Film|)
+          (=> cat::|python| cat::|program|)
+          (=> cat::|numpy| cat::|python|)
+          (=> (or cat::|numpy| cat::|scipy|) cat::|numerics|)
+          (=> (or cat::|fedora| cat::|debian| cat::|ubuntu|) cat::|linux|)
+          (=> (and cat::|simulator| (or cat::|flug| cat::|racing|)) cat::|Spiel|)
+          (=> cat::|joystick| cat::|Spiel|)
+          (=> (and cat::|event| cat::|Musik|) cat::|Konzert|)
+          ;; if there is a `not' criterion, it should come last
+          (=> (and cat::|youtube| (not cat::|Musik|)) cat::|video|)
+          (=> cat::|gtk| cat::|GUI|)))

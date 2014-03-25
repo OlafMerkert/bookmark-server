@@ -14,17 +14,22 @@
 ;;; bookmark table
 
 (defun classify (bookmark-list &optional blacklist)
+  "produce a table mapping all categories (except those in
+`blacklist') to lists of bookmarks contained in `bookmark-list'."
   ;; every call of bookmark-generator should give a bookmark
   (let ((category-table (make-hash-table)))
     (flet ((store (category bookmark)
              (push bookmark (gethash category category-table))))
-      (dolist (bm bookmark-list) 
-        (aif (set-difference (categories bm) blacklist)
-             (dolist (c it) (store c bm))
-             (store :empty bm))))
+      (iterate-elements bookmark-list
+                        (lambda (bm)
+                          (aif (set-difference (categories bm) blacklist)
+                               (dolist (c it) (store c bm))
+                               (store :empty bm)))))
     category-table))
 
 (defun table-sizes (table &optional include-empty)
+  "For a hash-`table' of sequences, find the keys with the longest
+sequence."
   (let ((sizes (make-array 10 :adjustable t :fill-pointer 0)))
     (maphash (lambda (k v)
                (if (or include-empty (not (eq k :empty)))
@@ -32,27 +37,59 @@
              table)
     (sort sizes #'> :key #'cdr)))
 
+(defun largest-key (table)
+  "For a hash-`table' of sequences, find the key with the longest
+sequence, break ties by sorting alphabetically."
+  (let ((key nil)
+        (size -1))
+    (maphash (lambda (k v &aux (l (length v)))
+               (cond ((eq k :empty))
+                     ((> l size) (setf key k
+                                       size l))
+                     ((and (= l size)
+                           (string-greaterp (mkstr key) (mkstr k)))
+                      (setf key k))))
+             table)
+    (values key size)))
+
+(defun sort-bookmarks (bookmark-list)
+  (sort bookmark-list #'string-not-greaterp :key #'title))
+
+
 (defun build-tree (bookmark-list &optional blacklist)
   (let* ((cls1 (classify bookmark-list blacklist))
          (tree (build-tree-part cls1 blacklist))
-         (empty (gethash :empty cls1)))
+         (empty (sort-bookmarks (gethash :empty cls1))))
     (if (length=0 empty)
         tree
         (append1 tree empty))))
 
+(defpar refinement-limit 2)
+
+
 (defun build-tree-part (cls1 blacklist)
-  (let ((cats (table-sizes cls1)))
-    (unless (length=0 cats)
-      (let* ((cat1 (car (elt cats 0)))
-             (cat1bms (gethash cat1 cls1))
-             (bl1 (cons cat1 blacklist)))
-        ;; remove these categories
+  ;; choose the category with the most entries
+  (mvbind (cat1 size1) (largest-key cls1)
+    (when cat1
+      (let* ((cat1-bookmarks (gethash cat1 cls1))
+             (blacklist-1 (cons cat1 blacklist)))
+        ;; remove category from the table
         (remhash cat1 cls1)
-        (maphash (lambda (k v) (aif (nset-difference v cat1bms)
+        ;; remove the bookmarks in `cat1' from the other lists for the
+        ;; other categories
+        (maphash (lambda (k v) (aif (nset-difference v cat1-bookmarks)
                                (setf (gethash k cls1) it)
                                (remhash  k cls1)))
                  cls1)
-        (cons (cons cat1 (build-tree cat1bms bl1))
-              (build-tree-part cls1 bl1))))))
+        ;; if this category is small, don't group further
+        (cons (if (<= size1 refinement-limit)
+                  (append1 (sort-bookmarks cat1-bookmarks)
+                           (build-tree-part cls1 blacklist-1))
+                  (cons cat1 (build-tree cat1-bookmarks blacklist-1)))
+              (build-tree-part cls1 blacklist-1))))))
 
 ;; todo add mechanisms to allow prioritisation of categories
+
+
+;;; todo iteration on trees
+

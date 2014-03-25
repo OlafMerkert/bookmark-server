@@ -101,6 +101,12 @@
               ("plot" . "plotting")
               "radio"
               "Schlusslicht"
+              "probability"
+              ("wahrscheinlichkeit" . "probability")
+              "Physik"
+              ("Physics" . "Physik")
+              ("fisica" . "Physik")
+              "shop"
               )))
 
 (defpar url->category
@@ -149,6 +155,9 @@
           (=> (and cat::|simulator| (or cat::|flug| cat::|racing|)) cat::|Spiel|)
           (=> cat::|joystick| cat::|Spiel|)
           (=> (and cat::|event| cat::|Musik|) cat::|Konzert|)
+          (=> cat::|Mathematica| cat::|computer algebra|)
+          (=> (or cat::|geometry| cat::|algebra| cat::|number theory|)
+              cat::|math|)
           ;; if there is a `not' criterion, it should come last
           (=> (and cat::|youtube| (not cat::|Musik|)) cat::|video|)
           (=> cat::|gtk| cat::|GUI|)))

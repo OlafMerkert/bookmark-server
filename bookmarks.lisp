@@ -29,7 +29,8 @@
    #:get-bookmark%
    #:cannot-remove-auto-category
    #:add-categories
-   #:cat-rule))
+   #:cat-rule
+   #:bookmarks-without-category))
 
 (defpackage :bookmark-categories
   (:nicknames :cat))
@@ -284,6 +285,8 @@
 (defun bookmarks-in-category (category)
   (all-bookmarks (lambda (bm) (member category (categories bm) :test 'eq))))
 
+(defun bookmarks-without-category ()
+  (all-bookmarks (lambda (bm) (null (categories bm)))))
 
 (defun all-categories ()
   (let ((categories (make-container 'binary-search-tree

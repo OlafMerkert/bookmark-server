@@ -100,38 +100,62 @@
     (bookmark/document (:title "All bookmarks as list")
       ;; todo Form for creating new bookmarks
       ;; List of present bookmarks
-      (:p (:a :href "/bookmarks/tree" "Tree View"))
+      (:p (:a :href "/bookmarks/tree" "Tree View") " "
+          (:a :href "/bookmarks/list0" "List View (uncategorised only)"))
       (category-filters (bm:all-known-categories) category)
       (:div :id (cc bookmarks-list)
             (iterate-elements (aif category
-                                    (bm:bookmarks-in-category it)
-                                    (bm:all-bookmarks))
-                               #'single-bookmark))
+                                   (bm:bookmarks-in-category it)
+                                   (bm:all-bookmarks))
+                              #'single-bookmark))
       )))
+
+(define-easy-handler (bookmarks-list0 :uri "/bookmarks/list0") ()
+  (bookmark/document (:title "Uncategorised bookmarks as list")
+    ;; todo Form for creating new bookmarks
+    ;; List of present bookmarks
+    (:p (:a :href "/bookmarks/list" "List View") " "
+        (:a :href "/bookmarks/tree" "Tree View"))
+    (:div :style (css-lite:inline-css :display "none")
+          (category-filters (bm:all-known-categories)))
+    (:div :id (cc bookmarks-list)
+          (iterate-elements (bm:bookmarks-without-category)
+                            #'single-bookmark))
+    ))
 
 (define-easy-handler (bookmarks-tree :uri "/bookmarks/tree") (category)
   (let ((category (bm:category-p category)))
     (bookmark/document (:title "All bookmarks as tree")
       ;; todo Form for creating new bookmarks
       ;; List of present bookmarks
-      (:p (:a :href "/bookmarks/list" "List View"))
+      (:p (:a :href "/bookmarks/list" "List View") " "
+          (:a :href "/bookmarks/list0" "List View (uncategorised only)"))
       (category-filters (bm:all-known-categories) category)
       (:div :id (cc bookmarks-tree)
-            (labels ((render-bm-tree (tree)
+            (labels ((render-bm-tree (tree &optional collapsed)
                        (cond ((null tree))
                              ((atom tree)
                               (single-bookmark tree))
+                             ;; no explicit grouping for categories
+                             ;; with just one or two children
+                             ((and (symbolp (car tree))
+                                   (<= (length (cdr tree)) 1)
+                                   (symbolp (cadr tree)))
+                              (render-bm-tree (cdr tree)
+                                              (cons (car tree) collapsed)))
                              ((symbolp (car tree))
                               (htm (:fieldset :class "category"
                                               (:legend :class "categories"
+                                                       (dolist (c (reverse collapsed))
+                                                         (str c) (str " "))
                                                        (str (car tree)))
                                               (render-bm-tree (cdr tree)))))
                              (t (render-bm-tree (car tree))
                                 (render-bm-tree (cdr tree))))))
               (render-bm-tree (aif category
                                    (bm-tree:build-tree 
-                                    (collect-elements (bm:bookmarks-in-category it)) (list it))
-                                   (bm-tree:build-tree (collect-elements (bm:all-bookmarks)))))))
+                                    (bm:bookmarks-in-category it) (list it))
+                                   (bm-tree:build-tree (bm:all-bookmarks))))))
       )))
 
 (defun category-filters (categories &optional active)

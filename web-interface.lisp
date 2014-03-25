@@ -3,7 +3,11 @@
 (defpackage :bookmark-web-interface
   (:nicknames :bm-web)
   (:shadowing-import-from :parenscript #:this #:in)
+  (:shadowing-import-from :cl-containers
+                          #:enqueue #:dequeue
+                          #:filter #:finish)
   (:use :cl :ol :web-utils
+        :cl-containers
         :hunchentoot :cl-who
         :parenscript
         :ajax-actions)
@@ -67,7 +71,7 @@
 (define-easy-handler (bookmarks-start :uri "/bookmarks") ()
   (html/document (:title #1="Bookmark Server")
     (:h1 #1#)
-    (:p "View the " (:a :href (breadcrumb->url '(bookmarks list)) "list") " of bookmarks.")))
+    (:p "View the " (:a :href (breadcrumb->url '(bookmarks list)) "list") " or " (:a :href (breadcrumb->url '(bookmarks tree)) "tree") " of bookmarks.")))
 
 (setup-static-content "/scripts/jquery-ui-1.10.4.custom.min.css"
                       #P"/home/olaf/Projekte/bookmark-server/jquery-ui-1.10.4.custom.min.css"
@@ -99,9 +103,10 @@
       (:p (:a :href "/bookmarks/tree" "Tree View"))
       (category-filters (bm:all-known-categories) category)
       (:div :id (cc bookmarks-list)
-            (mapc #'single-bookmark (aif category
-                                         (bm:bookmarks-in-category it)
-                                         (bm:all-bookmarks))))
+            (iterate-elements (aif category
+                                    (bm:bookmarks-in-category it)
+                                    (bm:all-bookmarks))
+                               #'single-bookmark))
       )))
 
 (define-easy-handler (bookmarks-tree :uri "/bookmarks/tree") (category)
@@ -125,19 +130,21 @@
                                 (render-bm-tree (cdr tree))))))
               (render-bm-tree (aif category
                                    (bm-tree:build-tree 
-                                    (bm:bookmarks-in-category it) (list it))
-                                   (bm-tree:build-tree (bm:all-bookmarks))))))
+                                    (collect-elements (bm:bookmarks-in-category it)) (list it))
+                                   (bm-tree:build-tree (collect-elements (bm:all-bookmarks)))))))
       )))
 
 (defun category-filters (categories &optional active)
   (html/node
     (:div :class "categories filters"
-          (dolist (c categories)
-            (htm (:a :href (if (eq c active) "?"
-                               (conc "?category=" (symbol-name c)))
-                     :class (if (eq c active) "selected-category" "")
-                     (str c))
-                 (str " ")))))
+          (iterate-elements
+           categories
+           (lambda (c)
+             (htm (:a :href (if (eq c active) "?"
+                                (conc "?category=" (symbol-name c)))
+                      :class (if (eq c active) "selected-category" "")
+                      (str c))
+                  (str " "))))))
   )
 
 
@@ -365,7 +372,8 @@
                            :background-color "#f0f0f0"
                            :font-size "90%"
                            :color "darkred"
-                           :border "solid 1px lightgray"))
+                           :border "solid 1px lightgray"
+                           :font-family "sans-serif"))
     ((".ui-state-focus") (
                           :color "red"
                           :background-color "#e0e0e0"))))

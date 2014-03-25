@@ -165,7 +165,8 @@
 (defmethod compute-categories ((variant (eql 'categories)) (bm bookmark))
   ;; todo keep categories sorted.  
   (with-slots #1=(user-categories title-categories url-categories auto-categories) bm
-              (remove-duplicates (append . #1#))))
+              (sort (remove-duplicates (append . #1#))
+                    #'string-not-greaterp :key #'symbol-name)))
 
 (defmethod compute-categories ((variant (eql 'auto-categories)) (bm bookmark))
   (let ((category-set (make-hash-table))
@@ -263,7 +264,7 @@
   (aif (get-bookmark% url)
        (error 'bookmark-exists :bookmark it))
   ;; todo error recovery strategy?
-  (let ((bm (make-instance 'bookmark :url url :title title :user-categories categories)))
+  (let ((bm (make-instance 'bookmark :url url :title title :user-categories (mapcar #'cat categories))))
     (update-all-categories bm)
     (setf (item-at bookmarks url) bm)))
 
@@ -271,14 +272,13 @@
   (iterate-key-value bookmarks
                      (ilambda (k bm) (update-all-categories bm))))
 
-
-
 (defun all-bookmarks (&optional predicate)
-  (let (bms)
+  (let ((bms (make-container 'binary-search-tree :key #'title
+                             :sorter #'string-not-greaterp :test #'string=)))
     (iterate-key-value bookmarks
                        (ilambda (k bm) (when (or (not predicate)
                                             (funcall predicate bm))
-                                    (push bm bms))))
+                                    (insert-item bms bm))))
     bms))
 
 (defun bookmarks-in-category (category)
@@ -286,16 +286,25 @@
 
 
 (defun all-categories ()
-  (let (categories)
+  (let ((categories (make-container 'binary-search-tree
+                                    :sorter (clambda (string-not-greaterp (symbol-name x!a)
+                                                                     (symbol-name x!b)))
+                                    :test 'eq)))
     (iterate-key-value bookmarks
-                       (ilambda (k bm) (aif (categories bm) (push it categories))))
-    (remove-duplicates (flatten categories))))
+                       (ilambda (k bm)
+                         (aif (categories bm)
+                              (dolist (item it)
+                                (insert-item categories item)))))
+    categories))
 
 (defun all-known-categories ()
-  (let (categories)
+  (let ((categories (make-container 'binary-search-tree
+                                    :sorter (clambda (string-not-greaterp (symbol-name x!a)
+                                                                     (symbol-name x!b)))
+                                    :test 'eq)))
     (do-symbols (s :bookmark-categories)
-      (push s categories))
-    (sort categories #'string<= :key #'symbol-name)))
+      (insert-item categories s))
+    categories))
 
 (defun category-p (cat)
   (or (and (symbolp cat) cat)

@@ -159,7 +159,8 @@
 
 (defun single-bookmark (bm)
   (html/node (:div :class "bookmark"
-                   (:a :class "bookmark-link" :target "_blank" :href (bm:url bm)
+                   (:a :class "bookmark-link" :target "_blank" :href (escape-string
+                                                                      (bm:url bm))
                        (esc (bm:title bm)))
                    (str " ")
                    (:span :class "categories"
@@ -281,7 +282,11 @@
       (let* ((input (category-form bm))
              (categories (remove-empty (split (@@ input (val))))))
         (bookmark-categories-add bm categories)))
-
+    
+    (defun scrollto (element)
+      (@@ ($ "html, body")
+          (animate (create scroll-top (@@ ($ element) (offset) top))
+                   "slow")))
 
     (bind-event document ready ()
       (bind-event "button.add-tag" click ()
@@ -291,6 +296,11 @@
               (new-category-form ($ this) bm))))
 
       (@@ ($ ".bookmark a.category") (click category-click))
+
+      ;; move to bottom of category when clicking on the legend
+      (bind-event "legend.categories" click ()
+        (let ((element (@@ ($ this) (parent) (next))))
+         (scrollto element)))
 
       (values))))
 

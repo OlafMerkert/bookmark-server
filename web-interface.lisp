@@ -307,6 +307,10 @@
 (define-easy-handler (bookmarks-css :uri "/bookmarks/style.css") ()
   (setf (hunchentoot:content-type*) "text/css")
   (css-lite:css
+    (("body") (
+               :font-family "serif"
+               :font-size "11pt"
+               :line-height "16pt"))
     ((".hidden") (
                   :visibility "hidden"
                   :margin-right "1em"
@@ -315,7 +319,7 @@
                   :text-align "right"
                   :color "gray"))
     ((".selected") (:background-color "yellow"))
-    ((".selected-category") (:background-color "lightgreen"))
+    ((".selected-category") (:background-color "black"))
     (("#messageContainer") (
                             :position "absolute"
                             :top "20px"
@@ -326,9 +330,10 @@
                    :margin "1ex"
                    :padding "3pt"
                    :border "solid gray 1px"))
-    (("span.categories") (:margin-left "2ex"))
     (("span.categories") (
-                          :font-size "80%")
+                          :margin-left "2ex"
+                          :font-size "80%"
+                          :font-family "sans-serif")
      ;; todo macro for generating link styling
      (("a:link") (
                   :color "orange"
@@ -346,41 +351,36 @@
                     :color "orange"
                     :text-decoration "none")))
     (("div.categories") (
-                         :font-size "80%"
+                         :font-size "9pt"
                          :font-family "sans-serif"
-                         :line-height "160%")
+                         :line-height "16pt")
      ;; todo macro for generating link styling
      (("a:link") (
                   :color "orange"
                   :text-decoration "none"
-                  :padding "1px"
-                  :border "solid 1px gray"))
+                  :border "dotted 1px lightgray"))
      (("a:visited") (
                      :color "orange"
                      :text-decoration "none"
-                     :padding "1px"
-                     :border "solid 1px gray"))
+                     :border "dotted 1px lightgray"))
      (("a:focus") (
                    :color "orange"
                    :text-decoration "none"
-                   :padding "1px"
-                   :border "solid 1px black"))
+                   :border "dotted 1px black"))
      (("a:hover") (
                    :color "orange"
                    :text-decoration "none"
-                   :padding "1px"
-                   :border "solid 1px black"))
+                   :border "dotted 1px black"))
      (("a:active") (
                     :color "orange"
                     :text-decoration "none"
-                    :padding "1px"
-                    :border "solid 1px black")))
+                    :border "dotted 1px black")))
     (("legend.categories") (
                             :font-size "90%"
                             :color "darkred"))
     (("table") (:border-collapse "collapse"))
     ((".bookmark")  (
-                     ;; :border "solid 1px lightgray"
+                     ;; :border "solid 1px lightlightgray"
                      :padding "2px")
      (("a:link") (
                   :color "blue"
@@ -403,7 +403,7 @@
                            :background-color "#f0f0f0"
                            :font-size "90%"
                            :color "darkred"
-                           :border "solid 1px lightgray"
+                           :border "solid 1px lightlightgray"
                            :font-family "sans-serif"))
     ((".ui-state-focus") (
                           :color "red"

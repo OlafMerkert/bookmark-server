@@ -158,6 +158,20 @@
              (single-bookmark bm:bookmark)))
       )))
 
+(define-easy-handler (bookmarks-menu :uri "/bookmarks/menu") ()
+  (let ((level 0))
+    (bookmark/document (:title "All Bookmarks in a big menu")
+      (:div :id (cc bookmarks-menu)
+            (bm-tree:walk-bm-tree
+             (bm-tree:build-tree (bm:all-bookmarks))
+             (htm (:div :class "menu-category"
+                        (:a :href "#" (str bm:category))
+                        (:div :class "menu-subentries"
+                              (bm-tree:walk-on))))
+             (htm (:a :class "menu-bookmark" :target "_blank"
+                      :href (escape-string (bm:url bm:bookmark))
+                      (esc (bm:title bm:bookmark)))))))))
+
 (defun category-filters (categories &optional active)
   (html/node
     (:div :class "categories filters"
@@ -301,7 +315,7 @@
 
     ;; adding categories
     (define-attached-form category "category-input" (:input-length 30)
-      (:form-init (provide-autocomplete input (all-categories))))
+                          (:form-init (provide-autocomplete input (all-categories))))
 
     (defun process-category-form (bm)
       (let* ((input (category-form bm))
@@ -310,7 +324,7 @@
 
     ;; editing the title of a bookmark
     (define-attached-form title "edit-title-input" (:input-length 100)
-      (:form-init (@@ input (val (bookmark-title bm)))))
+                          (:form-init (@@ input (val (bookmark-title bm)))))
 
     (defun process-title-form (bm)
       (let* ((input (title-form bm))
@@ -321,7 +335,7 @@
       (@@ ($ "html, body")
           (animate (create scroll-top (@@ ($ element) (offset) top))
                    "slow")))
-
+    
     (bind-event document ready ()
       (bind-event "button.add-tag" click ()
         (let ((bm (current-bookmark this)))
@@ -341,7 +355,16 @@
       ;; move to bottom of category when clicking on the legend
       (bind-event "legend.categories" click ()
         (let ((element (@@ ($ this) (parent) (next))))
-         (scrollto element)))
+          (scrollto element)))
+
+      ;; driving the menu
+      (@@ ($ ".menu-subentries") (hide))
+      (@@ ($ ".menu-category")
+          (each (lambda (index element)
+                  (@@ ($ element) (children) (eq 0)
+                      (click (lambda (e)
+                               (@@ ($ this) (next) (toggle "normal"))
+                               (@@ e (prevent-default))))))))
 
       (values))))
 
@@ -448,4 +471,27 @@
                            :font-family "sans-serif"))
     ((".ui-state-focus") (
                           :color "red"
-                          :background-color "#e0e0e0"))))
+                          :background-color "#e0e0e0"))
+    (("#bookmarksMenu") (
+                         :font-size "14pt"
+                         :position "absolute"
+                         :top "50px"    ; todo
+                         :left "10px")
+     ((".menu-category") (
+                          :border "1px black dashed"
+                          :margin "5px")
+      (("a") (
+              :background-color "silver"
+              :margin "5px")))
+
+     ((".menu-subentries") (
+                            :position "absolute"
+                            :left "200px"
+                            :top "0px"
+                            :width "100%"
+                            ))
+     ((".menu-bookmark") (
+                          :display "block"
+                          :background-color "yellow"
+                          :margin "5px"))
+     )))

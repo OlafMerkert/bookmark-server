@@ -5,7 +5,8 @@
   (:shadowing-import-from :parenscript #:this #:in)
   (:shadowing-import-from :cl-containers
                           #:enqueue #:dequeue
-                          #:filter #:finish)
+                          #:filter #:finish
+                          #:size)
   (:use :cl :ol :web-utils
         :cl-containers
         :hunchentoot :cl-who
@@ -32,7 +33,7 @@
   ;; `bm' should be a DOM node, `categories' a list of strings
   ;; first check if the categories is already added
   (cond ((length=0 categories)
-         ;; nothing supplied, just get rid of the input 
+         ;; nothing supplied, just get rid of the input
          (remove-category-form bm))
         (t (ajax-call
             (:server (:url (bookmark-url bm) :categories (@@ categories (join ",")))
@@ -43,8 +44,7 @@
             ;; exception handling
             (bm:bookmark-not-exists
              () ()
-             (user-message "Bookmark was deleted."))
-            ))))
+             (user-message "Bookmark was deleted."))))))
 
 (define-ajax-action+ (bookmark category remove) (bm category)
   ;; `bm' and `category' should be DOM nodes
@@ -65,8 +65,23 @@
           (user-message #1#))
          (bm:cannot-remove-auto-category
           () ()
-          (user-message "Cannot remove automatically assigned category.")))))
-  )
+          (user-message "Cannot remove automatically assigned category."))))))
+
+(define-ajax-action+ (bookmark edit-title) (bm new-title)
+  ;; `bm' should be a DOM node, `new-title' just a string
+  (cond ((length=0 new-title)
+         ;; don't allow deleting the bookmark title
+         (remove-title-form bm)
+         (user-message "Cannot set empty title."))
+        (t (ajax-call
+            (:server (:url (bookmark-url bm) :new-title new-title)
+                     (bm:edit-bookmark url 'bm:title new-title))
+            (:client () ()
+                     (set-bookmark-title bm new-title)
+                     (remove-title-form bm))
+            (bm:bookmark-not-exists
+             () ()
+             (user-message "Bookmark was deleted."))))))
 
 (define-easy-handler (bookmarks-start :uri "/bookmarks") ()
   (html/document (:title #1="Bookmark Server")
@@ -134,12 +149,12 @@
       (:div :id (cc bookmarks-tree)
             (bm-tree:walk-bm-tree
              (aif category
-                  (bm-tree:build-tree 
+                  (bm-tree:build-tree
                    (bm:bookmarks-in-category it) (list it))
                   (bm-tree:build-tree (bm:all-bookmarks)))
              (htm (:fieldset :class "category"
                              (:legend :class "categories" (str bm:category))
-                             (bm-tree:walk-on))) 
+                             (bm-tree:walk-on)))
              (single-bookmark bm:bookmark)))
       )))
 
@@ -169,7 +184,40 @@
                                      (str c))
                                  (str " "))) )
                    (str "&nbsp;")
-                   (:button :class "add-tag" "+"))))
+                   (:button :class "add-tag" "+")
+                   (:button :class "edit-title" "e"))))
+
+(defmacro+ps define-attached-form (name css-class (&key (input-length 30)) &rest code-parts)
+  ;; todo support for multiple form fields
+  (let ((form (symb name '-form)))
+    `(progn
+       (defun ,form (bm)
+         (@@ bm (find ,(format nil "input.~A" css-class))))
+
+       (defun ,(symb 'has- form) (bm)
+         (< (length (,form bm))))
+
+       (defun ,(symb 'remove- form) (bm)
+         (hide+remove (,form bm) ))
+
+       (defun ,(symb 'new- form) (button bm)
+         (let ((input ($ (who-ps-html (:input :type "text" :size ,(mkstr input-length) :class ,css-class)))))
+           ;; todo enable autocompletion
+           ,@(assoc1 :form-init code-parts)
+           ;; hide and attach
+           (@@ input (hide) (insert-after button) (show "normal"))
+           (let ((input (@@ button (next))))
+             ;; allow using ENTER to complete
+             (@@ input (bind "keydown"
+                             (lambda (e)
+                               (user-message (@ e key-code))
+                               (when (= (@ e key-code) (@ $ ui key-code |ENTER|))
+                                 (@@ e (prevent-default))
+                                 (user-message "enter") ; todo get this to work
+                                 (,(symb 'process- form) (current-bookmark this))))))
+             ;; move the focus to the field
+             (@@ input (focus)))
+           )))))
 
 (define-easy-handler (bookmarks-js :uri (breadcrumb->url (append1 bm-root "logic.js"))) ()
   (setf (hunchentoot:content-type*) "text/javascript")
@@ -202,8 +250,6 @@
                               (setf (@ this value) (@@ terms (join ", ")))
                               f))))))
 
-
-
     ;; bookmark specific code
     (defun current-bookmark (node)
       (let* ((node ($ node))
@@ -214,6 +260,9 @@
 
     (defun bookmark-title (bm)
       (@@ bm (children "a.bookmark-link") (text)))
+
+    (defun set-bookmark-title (bm title)
+      (@@ bm (children "a.bookmark-link") (text title)))
 
     (defun bookmark-url (bm)
       (@@ bm (children "a.bookmark-link") (attr "href")))
@@ -250,39 +299,24 @@
       (@@ $ (map ($ ".filters a")
                  get-text)))
 
-    (defun category-form (bm)
-      (@@ bm (find "input.category-input")))
-
-    (defun has-category-form (bm)
-      (< (length (category-form bm))))
-
-    (defun remove-category-form (bm)
-      (hide+remove (category-form bm) ))
-
-    (defun new-category-form (button bm)
-      (let ((input ($ (who-ps-html (:input :type "text" :size "30" :class "category-input")))))
-        ;; todo enable autocompletion
-        (provide-autocomplete input (all-categories))
-        ;; hide and attach
-        (@@ input (hide)
-                  (insert-after button)
-                  (show "normal"))
-        ;; allow using ENTER to complete
-        (@@ input (bind "keydown"
-                        (lambda (e)
-                          (when (= (@ e key-code) (@ $ ui key-code |ENTER|))
-                            (@@ e (prevent-default))
-                            (user-message "enter") ; todo get this to work
-                            (process-category-form (current-bookmark this))))))
-        ;; move the focus to the field
-        (@@ input (focus))
-        ))
+    ;; adding categories
+    (define-attached-form category "category-input" (:input-length 30)
+      (:form-init (provide-autocomplete input (all-categories))))
 
     (defun process-category-form (bm)
       (let* ((input (category-form bm))
              (categories (remove-empty (split (@@ input (val))))))
         (bookmark-categories-add bm categories)))
-    
+
+    ;; editing the title of a bookmark
+    (define-attached-form title "edit-title-input" (:input-length 100)
+      (:form-init (@@ input (val (bookmark-title bm)))))
+
+    (defun process-title-form (bm)
+      (let* ((input (title-form bm))
+             (new-title (@@ input (val))))
+        (bookmark-edit-title bm new-title)))
+
     (defun scrollto (element)
       (@@ ($ "html, body")
           (animate (create scroll-top (@@ ($ element) (offset) top))
@@ -294,6 +328,13 @@
           (if (has-category-form bm)
               (process-category-form bm)
               (new-category-form ($ this) bm))))
+
+      (bind-event "button.edit-title" click ()
+        (let ((bm (current-bookmark this)))
+          (if (has-title-form bm)
+              (process-title-form bm)
+              (new-title-form ($ this) bm))))
+
 
       (@@ ($ ".bookmark a.category") (click category-click))
 

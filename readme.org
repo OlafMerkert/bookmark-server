@@ -14,4 +14,29 @@ Of course, the main goal is to develop some tools and experience for writing mod
 ** How to run it
 Currently, it does not do much, you can add bookmarks and view a list of all bookmarks stored in a Sqlite3 database. All the dependencies are either available in Quicklisp or on my Github.
 
-To run the application, load it via asdf/quicklisp, then call ~(bookmark-web-interface:start-bookmark-server)~, which will automatically setup a database in ~/var/cache/~.
+To run the application, load it via asdf/quicklisp, then call ~(bookmark-web-interface:start-bookmark-server)~, which will automatically setup a database in ~/var/cache/~. The entry point for the web interface is then at [[http://localhost:8080/bookmarks/list]].
+* Saving and loading bookmarks
+There are two funtions, [[file:bookmarks.lisp::(defun%20save-bookmarks%20(pathname)][save-bookmarks]] and [[file:bookmarks.lisp::(defun%20load-bookmarks%20(pathname)][load-bookmarks]], which allow to dump and restore the current bookmark database in JSON format.
+** Stored data
+We only saved the =user-categories= in addition to the =url= and =title=.
+** For now, we store this stuff in [[~/tmp/bookmarks.json]].
+* Importing Bookmarks from Chrome
+Call =import-chrome-bookmarks=. Note that if the bookmark is already present in the database, but the title in Chrome was changed, it will not be updated (because we assume that
+* Computing a tree of Bookmarks
+* Bookmarks
+A =bookmark= is identified by its =url=, and carries some additional data: a =title=, and =user-categories= which are the manually assigned categories. 
+** Automatically computing categories
+From the =title= and the =url=, we use the rules specified in ~bookmark-rules.lisp~ to assign more categories by matching regular expressions to compute =title-categories= resp. =url-categories=. Afterwards, we use a fixpoint iteration to add more categories based on logic rules, which may also be defined in ~bookmark-rules.lisp~.
+*** TODO web interface for specifying the rules
+* Categories
+Categories (or tags) are represented by symbols in the package =CAT=. Use the function =bookmarks:cat= to obtain a category from a string description. Note that in principle, you may also use symbols in different packages for identifying categories, but this probably causes trouble. Also don't forget that categories are case-sensitive.
+* Managing Bookmarks
+** Adding categories
+** Removing categories
+** TODO Editing the title
+** TODO Searching and removing duplicates
+do some kind of prefix comparison on the url?
+* Interface
+** TODO filtering bookmarks
+*** TODO filtering by logic rule
+*** TODO filtering by set of categories

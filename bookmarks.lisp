@@ -31,7 +31,8 @@
    #:add-categories
    #:cat-rule
    #:bookmarks-without-category
-   #:category))
+   #:category
+   #:edit-bookmark))
 
 (defpackage :bookmark-categories
   (:nicknames :cat))
@@ -274,6 +275,7 @@
   (iterate-key-value bookmarks
                      (ilambda (k bm) (update-all-categories bm))))
 
+;;; filtering function
 (defun all-bookmarks (&optional predicate)
   (let ((bms (make-container 'binary-search-tree :key #'title
                              :sorter #'string-not-greaterp :test #'string=)))
@@ -285,6 +287,9 @@
 
 (defun bookmarks-in-category (category)
   (all-bookmarks (lambda (bm) (member category (categories bm) :test 'eq))))
+
+(defun bookmarks-in-categories (categories)
+  (all-bookmarks (lambda (bm) (subsetp categories (categories bm) :test 'eq))))
 
 (defun bookmarks-without-category ()
   (all-bookmarks (lambda (bm) (null (categories bm)))))
@@ -333,8 +338,8 @@
                                            stream))))))))
 
 (defun load-bookmarks (pathname)
+  ;; todo ensure that `pathname' is a pathname
   (let ((json (cl-json:decode-json-from-source pathname)))
-    ;; todo
     (mapc (lambda (bm)
             (alist-bind (url title categories) bm
               (add-bookmark url title categories)))

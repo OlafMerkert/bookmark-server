@@ -22,11 +22,6 @@
 (eval-when (:load-toplevel :execute)
   (register-web-application "Bookmark Server" "/bookmarks"))
 
-(defun start-bookmark-server ()
-  (load-web-library :jquery)
-  (load-web-library :jquery-sticky)
-  (start-server))
-
 (ew (defpar bm-root '(bookmarks)))
 
 (define-ajax-action+ (bookmark categories add) (bm categories)
@@ -96,10 +91,9 @@
 (defmacro bookmark/document ((&key title) &body body)
   `(html/document (:title ,title
                           ;; todo use breadcrumbs?
+                          :library :jquery
+                          :library :jquery-sticky
                           :style "/bookmarks/style.css"
-                          :script "/scripts/jquery-1.10.2.min.js"
-                          :script "/scripts/sticky/sticky.js"
-                          :style "/scripts/sticky/sticky.css"
                           :script "/scripts/jquery-ui-1.10.4.custom.min.js"
                           :style "/scripts/jquery-ui-1.10.4.custom.min.css"
                           :script "/scripts/utils.js"

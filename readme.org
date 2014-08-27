@@ -1,3 +1,4 @@
+# -*- ispell-dictionary: "en_GB" -*-
 * Bookmark server
 currently at the very, very start of its development.
 
@@ -40,13 +41,55 @@ do some kind of prefix comparison on the url?
 ** TODO filtering bookmarks
 *** TODO filtering by logic rule
 *** TODO filtering by set of categories
-* Tasks
+* Tasks [0/6]
+** TODO REST interface [0/3]
+*** TODO learn about REST
+    SCHEDULED: <2014-08-27 Mi>
+*** TODO select REST library
+*** TODO serve bookmark data as JSON [0/3]
++ [ ] matching a set of tags
++ [ ] not matching a set of tags
++ [ ] all bookmarks without tags
 ** TODO split up the contents of [[file:web-interface.lisp]]
 + JavaScript Code
 + CSS code
 + HTML code
-** TODO Is there something better than CSS-lite?
+** TODO Is there something better than CSS-lite? 
 ** TODO Merge contents of [[file:readme.org]] and [[file:roadmap.org]], if possible
 ** TODO online sources for categorisation
 Using a webservice to compute the categories of an url might perhaps offload the classification problem, because this problem sounds a lot like a search engine problem.
 ** TODO nicer navigation of category tree
+* Roadmap
+** TODO managing bookmarks
+*** CRUD
+for bookmarks and categories
+*** devel tools
+figure out how to write this kind of application
+write some cool macros ;-)
+**** TODO integration of lisp and js code via ajax
+
+*** convenient input of categories
+provide some autocompletion facility to speed things up
+*** explore UI possibilities
+something Emacs like? could be very efficient, and would integrate well with conkeror
+** TODO browser integration / synchronisation
+perhaps an addon for chrome/chromium, maybe conkeror
+this is mostly important for being able to add bookmarks from open tabs/windows
+the other important function of bookmarks is being able to get completions of them in the address bar
+*** synchronisation / data transfer protocol
+chromium exports its bookmarks in a JSON format, this could also be useful for importing data
+*** TODO import existing bookmarks
+automatic tagging when things come from a hierarchy?
+** TODO hierarchy computation
+Just give tags to your bookmarks and let the computer figure out the hierarchy
+Epiphany was doing that
+*** tuning if necessary
+perhaps priorities for categories (to express generality of a tag)
+*** double entries
+should we allow bookmarks to appear twice in the hierarchy? Maybe in an alternative browsing mode -- "filtering view" or something
+** TODO multi user capabilities
+*** sharing of bookmarks?
+*** possible issues
+global vs local names, category assignment
+** TODO authentication
+even if the system stays single user, it needs some way to protect the data (at the very least against changes)
